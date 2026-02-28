@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chemistry Lab - Standalone Edition</title>
+    
+    <!-- Libraries via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-serif { font-family: 'Playfair Display', serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .glass { 
+            background: rgba(255, 255, 255, 0.7); 
+            backdrop-filter: blur(16px); 
+            border: 1px solid rgba(255,255,255,0.4); 
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        }
+
+        .glass-reflection {
+            position: absolute;
+            top: 0;
+            left: 10%;
+            width: 20%;
+            height: 100%;
+            background: linear-gradient(to right, rgba(255,255,255,0.1), rgba(255,255,255,0.05), transparent);
+            pointer-events: none;
+        }
+
+        /* Beaker Liquid Animation */
+        .beaker-liquid { 
+            transition: height 1.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.8s ease; 
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            overflow: hidden;
+            box-shadow: inset 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .liquid-surface {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 200%;
+            height: 10px;
+            background: rgba(255,255,255,0.2);
+            animation: wave 3s infinite linear;
+            filter: blur(1px);
+        }
+
+        @keyframes wave {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* Bubbles Animation (Gas) */
+        @keyframes bubble-rise {
+            0% { transform: translateY(0) scale(0.5); opacity: 0; }
+            20% { opacity: 0.8; }
+            80% { opacity: 0.8; }
+            100% { transform: translateY(-160px) scale(1.2); opacity: 0; }
+        }
+        .bubble { 
+            position: absolute; 
+            bottom: 5px; 
+            background: rgba(255,255,255,0.4); 
+            border: 1px solid rgba(255,255,255,0.6);
+            border-radius: 50%; 
+            animation: bubble-rise 2.5s infinite ease-out; 
+            box-shadow: 0 0 5px rgba(255,255,255,0.3);
+        }
+
+        /* Precipitate Animation (Solid) */
+        @keyframes precipitate-fall {
+            0% { transform: translateY(-40px); opacity: 0; height: 0; }
+            100% { transform: translateY(0); opacity: 1; height: 35px; }
+        }
+        .precipitate {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            filter: blur(3px);
+            border-radius: 40% 40% 0 0;
+            animation: precipitate-fall 3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        /* Steam Animation (Heat) */
+        @keyframes steam {
+            0% { transform: translateY(0) scale(0.8) rotate(0deg); opacity: 0; }
+            30% { opacity: 0.4; }
+            100% { transform: translateY(-80px) scale(2) rotate(20deg); opacity: 0; }
+        }
+        .steam-particle {
+            position: absolute;
+            top: 10%;
+            background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(10px);
+            animation: steam 4s infinite ease-out;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.2); }
+            50% { box-shadow: 0 0 50px rgba(245, 158, 11, 0.5); }
+        }
+        .heat-glow {
+            animation: glow 2s infinite ease-in-out;
+        }
+
+        @keyframes sparkle {
+            0%, 100% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1); opacity: 1; }
+        }
+        .sparkle {
+            position: absolute;
+            background: white;
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+            animation: sparkle 0.8s infinite;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+        
+        // Robust access to Framer Motion
+        const MotionGlobal = window.Motion || window.FramerMotion || window.framerMotion || {};
+        const motion = MotionGlobal.motion || (({ children, ...props }) => <div {...props}>{children}</div>);
+        const AnimatePresence = MotionGlobal.AnimatePresence || (({ children }) => <>{children}</>);
+
+        // Error Boundary Component
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            componentDidCatch(error, errorInfo) {
+                console.error("App Crash:", error, errorInfo);
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center p-6 bg-stone-50">
+                            <div className="max-w-md w-full glass p-8 rounded-3xl text-center shadow-2xl border-t-4 border-rose-500">
+                                <Icon name="alert-octagon" size={64} className="text-rose-500 mx-auto mb-4" />
+                                <h1 className="text-2xl font-serif font-bold mb-2">Đã xảy ra lỗi hệ thống</h1>
+                                <p className="text-stone-500 text-sm mb-6">Ứng dụng gặp sự cố không mong muốn. Vui lòng thử tải lại trang.</p>
+                                <button 
+                                    onClick={() => window.location.reload()}
+                                    className="w-full py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-all"
+                                >
+                                    Tải lại trang
+                                </button>
+                                {this.state.error && (
+                                    <pre className="mt-4 p-4 bg-stone-100 rounded-lg text-[10px] text-left overflow-auto max-h-40 text-rose-800">
+                                        {this.state.error.toString()}
+                                    </pre>
+                                )}
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // --- DATA ---
+        const ReactionOutcome = {
+            Occurs: 'occurs',
+            NoReaction: 'no-reaction',
+            Undetermined: 'undetermined'
+        };
+
+        const CHEMICAL_LIBRARY = [
+            // Kim loại kiềm & kiềm thổ
+            { id: 'li', name: 'Lithium', formula: 'Li', category: 'Kim loại kiềm', hazardLevel: 'Cao', color: '#e5e7eb', detailedSafety: 'Phản ứng với nước tạo khí Hidro dễ cháy và dung dịch kiềm ăn mòn.' },
+            { id: 'na', name: 'Sodium (Natri)', formula: 'Na', category: 'Kim loại kiềm', hazardLevel: 'Cao', color: '#e5e7eb', detailedSafety: 'Cực kỳ nguy hiểm khi gặp nước, có thể gây nổ.' },
+            { id: 'k', name: 'Potassium (Kali)', formula: 'K', category: 'Kim loại kiềm', hazardLevel: 'Cao', color: '#e5e7eb', detailedSafety: 'Bốc cháy ngay khi tiếp xúc với nước.' },
+            { id: 'ba', name: 'Barium', formula: 'Ba', category: 'Kim loại kiềm thổ', hazardLevel: 'Cao', color: '#d1d5db', detailedSafety: 'Tất cả các hợp chất bari tan đều cực độc.' },
+            { id: 'ca', name: 'Calcium (Canxi)', formula: 'Ca', category: 'Kim loại kiềm thổ', hazardLevel: 'Trung bình', color: '#e5e7eb', detailedSafety: 'Tạo dung dịch kiềm gây kích ứng.' },
+            { id: 'mg', name: 'Magnesium (Magiê)', formula: 'Mg', category: 'Kim loại', hazardLevel: 'Trung bình', color: '#94a3b8', detailedSafety: 'Cháy sáng chói, không dùng nước dập lửa magie.' },
+            
+            // Kim loại khác
+            { id: 'al', name: 'Aluminium (Nhôm)', formula: 'Al', category: 'Kim loại', hazardLevel: 'Thấp', color: '#cbd5e1', detailedSafety: 'Bột nhôm mịn dễ cháy nổ.' },
+            { id: 'fe', name: 'Iron (Sắt)', formula: 'Fe', category: 'Kim loại', hazardLevel: 'Thấp', color: '#64748b', detailedSafety: 'An toàn ở dạng khối.' },
+            { id: 'zn', name: 'Zinc (Kẽm)', formula: 'Zn', category: 'Kim loại', hazardLevel: 'Thấp', color: '#94a3b8', detailedSafety: 'Phản ứng mạnh với axit và kiềm.' },
+            { id: 'cu', name: 'Copper (Đồng)', formula: 'Cu', category: 'Kim loại', hazardLevel: 'Thấp', color: '#b45309', detailedSafety: 'Các hợp chất đồng có độc tính nhẹ.' },
+            { id: 'ag', name: 'Silver (Bạc)', formula: 'Ag', category: 'Kim loại', hazardLevel: 'Thấp', color: '#e2e8f0', detailedSafety: 'Bạc nitrat làm đen da.' },
+            { id: 'au', name: 'Gold (Vàng)', formula: 'Au', category: 'Kim loại', hazardLevel: 'Thấp', color: '#fbbf24', detailedSafety: 'Rất trơ.' },
+            { id: 'hg', name: 'Mercury (Thủy ngân)', formula: 'Hg', category: 'Kim loại', hazardLevel: 'Rất cao', color: '#94a3b8', detailedSafety: 'Hơi thủy ngân cực độc.' },
+            { id: 'pb', name: 'Lead (Chì)', formula: 'Pb', category: 'Kim loại', hazardLevel: 'Cao', color: '#475569', detailedSafety: 'Kim loại nặng, độc.' },
+            
+            // Phi kim
+            { id: 'o2', name: 'Oxygen', formula: 'O₂', category: 'Phi kim/Khí', hazardLevel: 'Trung bình', color: 'transparent', detailedSafety: 'Tăng nguy cơ cháy nổ mãnh liệt.' },
+            { id: 'h2', name: 'Hydrogen', formula: 'H₂', category: 'Phi kim/Khí', hazardLevel: 'Cao', color: 'transparent', detailedSafety: 'Cực kỳ dễ cháy nổ.' },
+            { id: 'cl2', name: 'Chlorine', formula: 'Cl₂', category: 'Phi kim/Khí', hazardLevel: 'Rất cao', color: '#facc15', detailedSafety: 'Khí độc gây phù phổi.' },
+            { id: 'n2', name: 'Nitrogen', formula: 'N₂', category: 'Phi kim/Khí', hazardLevel: 'Thấp', color: 'transparent', detailedSafety: 'Gây ngạt ở nồng độ cao.' },
+            { id: 's', name: 'Sulfur (Lưu huỳnh)', formula: 'S', category: 'Phi kim', hazardLevel: 'Thấp', color: '#fde047', detailedSafety: 'Khi cháy tạo SO2 độc.' },
+            { id: 'p', name: 'Phosphorus (Phốt pho)', formula: 'P', category: 'Phi kim', hazardLevel: 'Cao', color: '#ef4444', detailedSafety: 'P trắng tự cháy, cực độc.' },
+            { id: 'br2', name: 'Bromine', formula: 'Br₂', category: 'Phi kim/Lỏng', hazardLevel: 'Rất cao', color: '#991b1b', detailedSafety: 'Gây bỏng hóa chất cực nặng.' },
+            { id: 'i2', name: 'Iodine', formula: 'I₂', category: 'Phi kim', hazardLevel: 'Trung bình', color: '#4c1d95', detailedSafety: 'Hơi iốt gây kích ứng.' },
+            
+            // Axit
+            { id: 'hcl', name: 'Hydrochloric acid', formula: 'HCl', category: 'Axit vô cơ', hazardLevel: 'Trung bình', color: '#f8fafc', detailedSafety: 'Ăn mòn da và hỏng mắt.' },
+            { id: 'h2so4', name: 'Sulfuric acid', formula: 'H₂SO₄', category: 'Axit vô cơ', hazardLevel: 'Cao', color: '#f8fafc', detailedSafety: 'Cực kỳ nguy hiểm, háo nước mạnh.' },
+            { id: 'hno3', name: 'Nitric acid', formula: 'HNO₃', category: 'Axit vô cơ', hazardLevel: 'Cao', color: '#f8fafc', detailedSafety: 'Oxi hóa mạnh, làm vàng da.' },
+            { id: 'h3po4', name: 'Phosphoric acid', formula: 'H₃PO₄', category: 'Axit vô cơ', hazardLevel: 'Trung bình', color: '#f8fafc', detailedSafety: 'Ăn mòn nhẹ.' },
+            { id: 'h2s', name: 'Hydrogen sulfide', formula: 'H₂S', category: 'Khí độc', hazardLevel: 'Rất cao', color: 'transparent', detailedSafety: 'Mùi trứng thối, cực độc.' },
+            
+            // Bazơ
+            { id: 'naoh', name: 'Sodium hydroxide', formula: 'NaOH', category: 'Bazơ', hazardLevel: 'Cao', color: '#f1f5f9', detailedSafety: 'Ăn mòn cực mạnh (xút ăn da).' },
+            { id: 'koh', name: 'Potassium hydroxide', formula: 'KOH', category: 'Bazơ', hazardLevel: 'Cao', color: '#f1f5f9', detailedSafety: 'Ăn mòn cực mạnh.' },
+            { id: 'caoh2', name: 'Calcium hydroxide', formula: 'Ca(OH)₂', category: 'Bazơ', hazardLevel: 'Trung bình', color: '#f8fafc', detailedSafety: 'Kích ứng da và mắt.' },
+            { id: 'baoh2', name: 'Barium hydroxide', formula: 'Ba(OH)₂', category: 'Bazơ', hazardLevel: 'Cao', color: '#f1f5f9', detailedSafety: 'Kiềm mạnh và rất độc.' },
+            { id: 'nh3', name: 'Ammonia', formula: 'NH₃', category: 'Bazơ yếu', hazardLevel: 'Trung bình', color: 'transparent', detailedSafety: 'Mùi khai, kích ứng mạnh.' },
+            
+            // Muối
+            { id: 'nacl', name: 'Sodium chloride', formula: 'NaCl', category: 'Muối', hazardLevel: 'Thấp', color: '#f8fafc', detailedSafety: 'An toàn.' },
+            { id: 'caco3', name: 'Calcium carbonate', formula: 'CaCO₃', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'cuso4', name: 'Copper(II) sulfate', formula: 'CuSO₄', category: 'Muối', hazardLevel: 'Trung bình', color: '#3b82f6', detailedSafety: 'Độc với sinh vật thủy sinh.' },
+            { id: 'agno3', name: 'Silver nitrate', formula: 'AgNO₃', category: 'Muối', hazardLevel: 'Trung bình', color: '#f8fafc', detailedSafety: 'Làm đen da.' },
+            { id: 'bacl2', name: 'Barium chloride', formula: 'BaCl₂', category: 'Muối', hazardLevel: 'Cao', color: '#f1f5f9', detailedSafety: 'Rất độc nếu nuốt phải.' },
+            { id: 'na2so4', name: 'Natri Sunfat', formula: 'Na₂SO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#f8fafc', detailedSafety: 'An toàn.' },
+            { id: 'kmno4', name: 'Potassium permanganate', formula: 'KMnO₄', category: 'Muối/Oxi hóa', hazardLevel: 'Cao', color: '#7e22ce', detailedSafety: 'Chất oxi hóa mạnh, nhuộm màu da.' },
+            { id: 'ki', name: 'Potassium iodide', formula: 'KI', category: 'Muối', hazardLevel: 'Thấp', color: '#f8fafc', detailedSafety: 'An toàn.' },
+            { id: 'feso4', name: 'Iron(II) sulfate', formula: 'FeSO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#dcfce7', detailedSafety: 'Kích ứng nhẹ.' },
+            { id: 'fecl3', name: 'Iron(III) chloride', formula: 'FeCl₃', category: 'Muối', hazardLevel: 'Trung bình', color: '#b45309', detailedSafety: 'Ăn mòn nhẹ.' },
+            { id: 'nh4cl', name: 'Ammonium chloride', formula: 'NH₄Cl', category: 'Muối', hazardLevel: 'Thấp', color: '#f8fafc', detailedSafety: 'An toàn.' },
+            { id: 'nahco3', name: 'Sodium bicarbonate', formula: 'NaHCO₃', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'kno3', name: 'Potassium nitrate', formula: 'KNO₃', category: 'Muối', hazardLevel: 'Trung bình', color: '#f8fafc', detailedSafety: 'Chất oxi hóa mạnh khi nung.' },
+            
+            // Oxit
+            { id: 'na2o', name: 'Sodium oxide', formula: 'Na₂O', category: 'Oxit bazơ', hazardLevel: 'Cao', color: '#ffffff', detailedSafety: 'Phản ứng mạnh với nước.' },
+            { id: 'cao', name: 'Calcium oxide', formula: 'CaO', category: 'Oxit bazơ', hazardLevel: 'Trung bình', color: '#ffffff', detailedSafety: 'Tỏa nhiệt mạnh khi gặp nước.' },
+            { id: 'cuo', name: 'Copper(II) oxide', formula: 'CuO', category: 'Oxit bazơ', hazardLevel: 'Thấp', color: '#1e293b', detailedSafety: 'Độc nếu nuốt.' },
+            { id: 'fe2o3', name: 'Iron(III) oxide', formula: 'Fe₂O₃', category: 'Oxit bazơ', hazardLevel: 'Thấp', color: '#991b1b', detailedSafety: 'An toàn.' },
+            { id: 'co2', name: 'Carbon dioxide', formula: 'CO₂', category: 'Oxit axit', hazardLevel: 'Thấp', color: 'transparent', detailedSafety: 'Gây ngạt ở nồng độ cao.' },
+            { id: 'so2', name: 'Sulfur dioxide', formula: 'SO₂', category: 'Oxit axit', hazardLevel: 'Cao', color: 'transparent', detailedSafety: 'Khí độc, mùi hắc.' },
+            { id: 'p2o5', name: 'Phosphorus pentoxide', formula: 'P₂O₅', category: 'Oxit axit', hazardLevel: 'Trung bình', color: '#ffffff', detailedSafety: 'Háo nước mạnh.' },
+            
+            // Hữu cơ
+            { id: 'ch4', name: 'Methane', formula: 'CH₄', category: 'Hữu cơ', hazardLevel: 'Trung bình', color: 'transparent', detailedSafety: 'Dễ cháy nổ.' },
+            { id: 'c2h5oh', name: 'Ethanol', formula: 'C₂H₅OH', category: 'Hữu cơ', hazardLevel: 'Trung bình', color: 'transparent', detailedSafety: 'Dễ cháy.' },
+            { id: 'ch3cooh', name: 'Acetic acid', formula: 'CH₃COOH', category: 'Hữu cơ', hazardLevel: 'Thấp', color: 'transparent', detailedSafety: 'Axit hữu cơ yếu.' },
+            { id: 'glucose', name: 'Glucose', formula: 'C₆H₁₂O₆', category: 'Hữu cơ', hazardLevel: 'Thấp', color: 'transparent', detailedSafety: 'An toàn.' },
+            { id: 'c2h4', name: 'Ethylene', formula: 'C₂H₄', category: 'Hữu cơ', hazardLevel: 'Trung bình', color: 'transparent', detailedSafety: 'Dễ cháy.' },
+            { id: 'c2h2', name: 'Acetylene', formula: 'C₂H₂', category: 'Hữu cơ', hazardLevel: 'Cao', color: 'transparent', detailedSafety: 'Cực kỳ dễ cháy nổ.' },
+            { id: 'c6h6', name: 'Benzene', formula: 'C₆H₆', category: 'Hữu cơ', hazardLevel: 'Rất cao', color: 'transparent', detailedSafety: 'Độc, gây ung thư.' },
+            
+            // Khác
+            { id: 'h2o', name: 'Water (Nước)', formula: 'H₂O', category: 'Dung môi', hazardLevel: 'Thấp', color: '#dbeafe', detailedSafety: 'An toàn.' },
+            { id: 'h2o2', name: 'Hydrogen peroxide', formula: 'H₂O₂', category: 'Oxi hóa', hazardLevel: 'Trung bình', color: 'transparent', detailedSafety: 'Gây bỏng da.' },
+            { id: 'alcl3', name: 'Aluminium chloride', formula: 'AlCl₃', category: 'Muối', hazardLevel: 'Trung bình', color: '#f8fafc', detailedSafety: 'Háo nước, tỏa nhiệt.' },
+            { id: 'al2so43', name: 'Aluminium sulfate', formula: 'Al₂(SO₄)₃', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'mgcl2', name: 'Magnesium chloride', formula: 'MgCl₂', category: 'Muối', hazardLevel: 'Thấp', color: '#f8fafc', detailedSafety: 'An toàn.' },
+            { id: 'mgso4', name: 'Magnesium sulfate', formula: 'MgSO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'zncl2', name: 'Zinc chloride', formula: 'ZnCl₂', category: 'Muối', hazardLevel: 'Trung bình', color: '#f8fafc', detailedSafety: 'Ăn mòn nhẹ.' },
+            { id: 'znso4', name: 'Zinc sulfate', formula: 'ZnSO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'pbno32', name: 'Lead(II) nitrate', formula: 'Pb(NO₃)₂', category: 'Muối', hazardLevel: 'Cao', color: '#ffffff', detailedSafety: 'Rất độc, kim loại nặng.' },
+            { id: 'cuno32', name: 'Copper(II) nitrate', formula: 'Cu(NO₃)₂', category: 'Muối', hazardLevel: 'Trung bình', color: '#3b82f6', detailedSafety: 'Oxi hóa mạnh.' },
+            { id: 'feoh2', name: 'Iron(II) hydroxide', formula: 'Fe(OH)₂', category: 'Bazơ không tan', hazardLevel: 'Thấp', color: '#dcfce7', detailedSafety: 'Dễ bị oxi hóa trong không khí.' },
+            { id: 'feoh3', name: 'Iron(III) hydroxide', formula: 'Fe(OH)₃', category: 'Bazơ không tan', hazardLevel: 'Thấp', color: '#991b1b', detailedSafety: 'An toàn.' },
+            { id: 'aloh3', name: 'Aluminium hydroxide', formula: 'Al(OH)₃', category: 'Bazơ không tan', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'cuoh2', name: 'Copper(II) hydroxide', formula: 'Cu(OH)₂', category: 'Bazơ không tan', hazardLevel: 'Thấp', color: '#60a5fa', detailedSafety: 'Kích ứng nhẹ.' },
+            { id: 'mgoh2', name: 'Magnesium hydroxide', formula: 'Mg(OH)₂', category: 'Bazơ không tan', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'sio2', name: 'Silicon dioxide', formula: 'SiO₂', category: 'Oxit', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn (dạng cát).' },
+            { id: 'co', name: 'Carbon monoxide', formula: 'CO', category: 'Oxit', hazardLevel: 'Rất cao', color: 'transparent', detailedSafety: 'Khí cực độc, không mùi.' },
+            { id: 'h2so4_dac', name: 'Sulfuric acid (đặc)', formula: 'H₂SO₄ (đặc)', category: 'Axit vô cơ', hazardLevel: 'Rất cao', color: '#f8fafc', detailedSafety: 'Cực kỳ nguy hiểm, háo nước mạnh, gây bỏng sâu.' },
+            { id: 'hno3_dac', name: 'Nitric acid (đặc)', formula: 'HNO₃ (đặc)', category: 'Axit vô cơ', hazardLevel: 'Rất cao', color: '#f8fafc', detailedSafety: 'Oxi hóa cực mạnh, gây bỏng và hỏng đường hô hấp.' },
+            { id: 'k2cr2o7', name: 'Potassium dichromate', formula: 'K₂Cr₂O₇', category: 'Muối/Oxi hóa', hazardLevel: 'Rất cao', color: '#f97316', detailedSafety: 'Độc, gây ung thư, oxi hóa mạnh.' },
+            { id: 'mno2', name: 'Manganese dioxide', formula: 'MnO₂', category: 'Oxit', hazardLevel: 'Trung bình', color: '#1e293b', detailedSafety: 'Kích ứng đường hô hấp.' },
+            { id: 'baso4', name: 'Barium sulfate', formula: 'BaSO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'Không tan, tương đối an toàn.' },
+            { id: 'agcl', name: 'Silver chloride', formula: 'AgCl', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'Nhạy cảm với ánh sáng.' },
+            { id: 'cus', name: 'Copper(II) sulfide', formula: 'CuS', category: 'Muối', hazardLevel: 'Thấp', color: '#000000', detailedSafety: 'An toàn.' },
+            { id: 'fes', name: 'Iron(II) sulfide', formula: 'FeS', category: 'Muối', hazardLevel: 'Thấp', color: '#000000', detailedSafety: 'An toàn.' },
+            { id: 'so3', name: 'Sulfur trioxide', formula: 'SO₃', category: 'Oxit axit', hazardLevel: 'Cao', color: 'transparent', detailedSafety: 'Phản ứng cực mạnh với nước tạo H2SO4.' },
+            { id: 'no2', name: 'Nitrogen dioxide', formula: 'NO₂', category: 'Khí độc', hazardLevel: 'Rất cao', color: '#92400e', detailedSafety: 'Khí màu nâu đỏ, cực độc.' },
+            { id: 'nh4no3', name: 'Ammonium nitrate', formula: 'NH₄NO₃', category: 'Muối', hazardLevel: 'Trung bình', color: '#ffffff', detailedSafety: 'Nguy cơ cháy nổ khi gặp nhiệt độ cao.' },
+            { id: 'kclo3', name: 'Potassium chlorate', formula: 'KClO₃', category: 'Muối/Oxi hóa', hazardLevel: 'Cao', color: '#ffffff', detailedSafety: 'Dễ gây nổ khi trộn với chất khử.' },
+            { id: 'hf', name: 'Hydrofluoric acid', formula: 'HF', category: 'Axit vô cơ', hazardLevel: 'Rất cao', color: 'transparent', detailedSafety: 'Cực độc, ăn mòn thủy tinh và xương người.' },
+            { id: 'na3po4', name: 'Trisodium phosphate', formula: 'Na₃PO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'Kích ứng nhẹ.' },
+            { id: 'ag3po4', name: 'Silver phosphate', formula: 'Ag₃PO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#facc15', detailedSafety: 'An toàn.' },
+            { id: 'cucl2', name: 'Copper(II) chloride', formula: 'CuCl₂', category: 'Muối', hazardLevel: 'Trung bình', color: '#0d9488', detailedSafety: 'Độc với sinh vật thủy sinh.' },
+            { id: 'fecl2', name: 'Iron(II) chloride', formula: 'FeCl₂', category: 'Muối', hazardLevel: 'Thấp', color: '#dcfce7', detailedSafety: 'Kích ứng nhẹ.' },
+            { id: 'al2o3', name: 'Aluminium oxide', formula: 'Al₂O₃', category: 'Oxit', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'zno', name: 'Zinc oxide', formula: 'ZnO', category: 'Oxit', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'mgo', name: 'Magnesium oxide', formula: 'MgO', category: 'Oxit', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'bao', name: 'Barium oxide', formula: 'BaO', category: 'Oxit bazơ', hazardLevel: 'Cao', color: '#ffffff', detailedSafety: 'Phản ứng mạnh với nước.' },
+            { id: 'feno33', name: 'Iron(III) nitrate', formula: 'Fe(NO₃)₃', category: 'Muối', hazardLevel: 'Trung bình', color: '#fde68a', detailedSafety: 'Chất oxi hóa.' },
+            { id: 'baso3', name: 'Barium sulfite', formula: 'BaSO₃', category: 'Muối', hazardLevel: 'Trung bình', color: '#ffffff', detailedSafety: 'Độc nếu nuốt.' },
+            { id: 'na2co3', name: 'Sodium carbonate', formula: 'Na₂CO₃', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'k2so4', name: 'Potassium sulfate', formula: 'K₂SO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'k2co3', name: 'Potassium carbonate', formula: 'K₂CO₃', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'Kiềm nhẹ.' },
+            { id: 'mgco3', name: 'Magnesium carbonate', formula: 'MgCO₃', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'znco3', name: 'Zinc carbonate', formula: 'ZnCO₃', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'fes2', name: 'Pyrite (Sắt sunfua)', formula: 'FeS₂', category: 'Khoáng vật', hazardLevel: 'Trung bình', color: '#fbbf24', detailedSafety: 'Khi đốt tạo SO2 độc.' },
+            { id: 'cu2o', name: 'Copper(I) oxide', formula: 'Cu₂O', category: 'Oxit', hazardLevel: 'Thấp', color: '#991b1b', detailedSafety: 'An toàn.' },
+            { id: 'cr2o3', name: 'Chromium(III) oxide', formula: 'Cr₂O₃', category: 'Oxit', hazardLevel: 'Trung bình', color: '#166534', detailedSafety: 'Bột mịn gây kích ứng.' },
+            { id: 'k2cro4', name: 'Potassium chromate', formula: 'K₂CrO₄', category: 'Muối/Oxi hóa', hazardLevel: 'Rất cao', color: '#facc15', detailedSafety: 'Độc, gây ung thư.' },
+            { id: 'na2s', name: 'Sodium sulfide', formula: 'Na₂S', category: 'Muối', hazardLevel: 'Cao', color: '#f8fafc', detailedSafety: 'Phản ứng với axit tạo khí H2S cực độc.' },
+            { id: 'na2so3', name: 'Sodium sulfite', formula: 'Na₂SO₃', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'Chất khử.' },
+            { id: 'nahso4', name: 'Sodium bisulfate', formula: 'NaHSO₄', category: 'Muối axit', hazardLevel: 'Trung bình', color: '#ffffff', detailedSafety: 'Có tính axit mạnh trong dung dịch.' },
+            { id: 'nahso3', name: 'Sodium bisulfite', formula: 'NaHSO₃', category: 'Muối axit', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'Chất khử.' },
+            { id: 'cahco32', name: 'Calcium bicarbonate', formula: 'Ca(HCO₃)₂', category: 'Muối', hazardLevel: 'Thấp', color: 'transparent', detailedSafety: 'Chỉ tồn tại trong dung dịch.' },
+            { id: 'mghco32', name: 'Magnesium bicarbonate', formula: 'Mg(HCO₃)₂', category: 'Muối', hazardLevel: 'Thấp', color: 'transparent', detailedSafety: 'Chỉ tồn tại trong dung dịch.' },
+            { id: 'starch', name: 'Starch (Tinh bột)', formula: '(C₆H₁₀O₅)ₙ', category: 'Hữu cơ', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'sucrose', name: 'Sucrose (Đường)', formula: 'C₁₂H₂₂O₁₁', category: 'Hữu cơ', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'glycerol', name: 'Glycerol', formula: 'C₃H₅(OH)₃', category: 'Hữu cơ', hazardLevel: 'Thấp', color: 'transparent', detailedSafety: 'An toàn.' },
+            { id: 'phenol', name: 'Phenol', formula: 'C₆H₅OH', category: 'Hữu cơ', hazardLevel: 'Rất cao', color: '#f8fafc', detailedSafety: 'Cực độc, gây bỏng hóa chất nặng, thấm qua da.' },
+            { id: 'aniline', name: 'Aniline', formula: 'C₆H₅NH₂', category: 'Hữu cơ', hazardLevel: 'Cao', color: '#fde68a', detailedSafety: 'Độc, thấm qua da.' },
+            { id: 'protein', name: 'Protein (Lòng trắng trứng)', formula: 'Protein', category: 'Hữu cơ', hazardLevel: 'Thấp', color: '#f8fafc', detailedSafety: 'An toàn.' },
+            { id: 'cuco3', name: 'Copper(II) carbonate', formula: 'CuCO₃', category: 'Muối', hazardLevel: 'Trung bình', color: '#0d9488', detailedSafety: 'Dễ phân hủy khi nung.' },
+            { id: 'fe3o4', name: 'Iron(II,III) oxide', formula: 'Fe₃O₄', category: 'Oxit', hazardLevel: 'Thấp', color: '#1e293b', detailedSafety: 'Oxit sắt từ, có từ tính.' },
+            { id: 'ag2o', name: 'Silver oxide', formula: 'Ag₂O', category: 'Oxit', hazardLevel: 'Trung bình', color: '#451a03', detailedSafety: 'Dễ bị khử thành bạc.' },
+            { id: 'k3po4', name: 'Potassium phosphate', formula: 'K₃PO₄', category: 'Muối', hazardLevel: 'Thấp', color: '#ffffff', detailedSafety: 'An toàn.' },
+            { id: 'hgno32', name: 'Mercury(II) nitrate', formula: 'Hg(NO₃)₂', category: 'Muối', hazardLevel: 'Rất cao', color: '#ffffff', detailedSafety: 'Cực độc, kim loại nặng.' },
+            { id: 'c', name: 'Carbon (Than)', formula: 'C', category: 'Phi kim', hazardLevel: 'Thấp', color: '#1c1917', detailedSafety: 'An toàn ở điều kiện thường.' },
+        ];
+
+        const EXAMPLES = [
+            { name: "Natri + Nước", a: "na", b: "h2o", temp: "", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Nhiệt nhôm", a: "al", b: "fe2o3", temp: "1000", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Tráng gương", a: "glucose", b: "agno3", temp: "60", unit: "°C", catalyst: "NH₃", pressure: "" },
+            { name: "Đồng + HNO₃ đặc", a: "cu", b: "hno3_dac", temp: "", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Sắt + Clo", a: "fe", b: "cl2", temp: "300", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Tinh bột + Iốt", a: "starch", b: "i2", temp: "", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Thuốc tím + H₂O₂", a: "kmno4", b: "h2o2", temp: "", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Phenol + Brom", a: "phenol", b: "br2", temp: "", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Điều chế Clo", a: "mno2", b: "hcl", temp: "80", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Sắt(III) + KI", a: "fecl3", b: "ki", temp: "", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Phức Đồng-Amoniac", a: "cuso4", b: "nh3", temp: "", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Bạc Nitrat + Na₂S", a: "agno3", b: "na2s", temp: "", unit: "°C", catalyst: "", pressure: "" },
+            { name: "Đường + H₂SO₄ đặc", a: "sucrose", b: "h2so4_dac", temp: "", unit: "°C", catalyst: "", pressure: "" },
+        ];
+
+        const CATALYSTS = ["MnO₂", "Fe", "Pt", "V₂O₅", "Ni", "H₂SO₄ đặc", "Men rượu", "Ánh sáng", "Nhiệt độ cao", "Cu", "Pd", "NH₃"];
+
+        const REACTIONS_DB = [
+            // --- PHẢN ỨNG CÓ XẢY RA (OCCURS) ---
+            // Kim loại + Axit
+            { reagents: ['fe', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Fe + 2HCl → FeCl₂ + H₂↑', observations: 'Sắt tan dần, sủi bọt khí không màu.', explanation: 'Sắt đẩy Hidro ra khỏi axit.', safety: 'Khí Hidro dễ cháy.', visual: { color: '#dcfce7', gas: true, heat: false } },
+            { reagents: ['zn', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Zn + 2HCl → ZnCl₂ + H₂↑', observations: 'Kẽm tan nhanh, sủi bọt khí mạnh.', explanation: 'Kẽm là kim loại hoạt động mạnh hơn Hidro.', safety: 'Tránh lửa.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['al', 'hcl'], outcome: ReactionOutcome.Occurs, equation: '2Al + 6HCl → 2AlCl₃ + 3H₂↑', observations: 'Nhôm tan mạnh, sủi bọt khí mãnh liệt, tỏa nhiệt.', explanation: 'Nhôm phản ứng mạnh với axit giải phóng Hidro.', safety: 'Phản ứng tỏa nhiệt mạnh.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['mg', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Mg + 2HCl → MgCl₂ + H₂↑', observations: 'Magiê tan cực nhanh, sủi bọt khí rất mạnh.', explanation: 'Magiê hoạt động hóa học rất mạnh.', safety: 'Phản ứng rất nhanh.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['fe', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Fe + H₂SO₄(loãng) → FeSO₄ + H₂↑', observations: 'Sắt tan, sủi bọt khí.', explanation: 'Sắt phản ứng với axit sunfuric loãng.', safety: 'Axit sunfuric ăn mòn.', visual: { color: '#dcfce7', gas: true, heat: false } },
+            
+            // Kim loại + Nước
+            { reagents: ['na', 'h2o'], outcome: ReactionOutcome.Occurs, equation: '2Na + 2H₂O → 2NaOH + H₂↑', observations: 'Natri nóng chảy thành viên tròn chạy trên mặt nước, sủi bọt khí mạnh, có thể bốc cháy.', explanation: 'Kim loại kiềm phản ứng mãnh liệt với nước tạo dung dịch kiềm và giải phóng Hidro.', safety: 'Nguy hiểm! Có thể gây nổ.', visual: { color: '#f1f5f9', gas: true, heat: true } },
+            { reagents: ['k', 'h2o'], outcome: ReactionOutcome.Occurs, equation: '2K + 2H₂O → 2KOH + H₂↑', observations: 'Kali bùng cháy ngay lập tức với ngọn lửa màu tím, sủi bọt khí cực mạnh.', explanation: 'Kali hoạt động mạnh hơn Natri.', safety: 'Cực kỳ nguy hiểm, dễ nổ.', visual: { color: '#f1f5f9', gas: true, heat: true } },
+            { reagents: ['ca', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'Ca + 2H₂O → Ca(OH)₂ + H₂↑', observations: 'Canxi tan chậm hơn natri, sủi bọt khí, dung dịch vẩn đục trắng.', explanation: 'Tạo thành canxi hydroxit ít tan.', safety: 'Dung dịch kiềm gây kích ứng.', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['ba', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'Ba + 2H₂O → Ba(OH)₂ + H₂↑', observations: 'Bari tan nhanh, sủi bọt khí mạnh, tỏa nhiệt.', explanation: 'Bari phản ứng mạnh với nước.', safety: 'Bari hydroxit rất độc.', visual: { color: '#f1f5f9', gas: true, heat: true } },
+
+            // Axit + Bazơ (Trung hòa)
+            { reagents: ['hcl', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'HCl + NaOH → NaCl + H₂O', observations: 'Không có hiện tượng rõ rệt, nhưng ống nghiệm nóng lên.', explanation: 'Phản ứng trung hòa tỏa nhiệt mạnh.', safety: 'Tránh để axit hoặc bazơ đặc dính vào da.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['h2so4', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'H₂SO₄ + 2NaOH → Na₂SO₄ + 2H₂O', observations: 'Tỏa nhiệt mạnh.', explanation: 'Phản ứng trung hòa giữa axit mạnh và bazơ mạnh.', safety: 'Axit sunfuric đặc rất nguy hiểm.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['hcl', 'koh'], outcome: ReactionOutcome.Occurs, equation: 'HCl + KOH → KCl + H₂O', observations: 'Tỏa nhiệt.', explanation: 'Phản ứng trung hòa.', safety: 'KOH ăn mòn da.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['hno3', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'HNO₃ + NaOH → NaNO₃ + H₂O', observations: 'Tỏa nhiệt.', explanation: 'Phản ứng trung hòa.', safety: 'HNO3 oxi hóa mạnh.', visual: { color: '#f8fafc', gas: false, heat: true } },
+
+            // Axit + Muối
+            { reagents: ['caco3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'CaCO₃ + 2HCl → CaCl₂ + CO₂↑ + H₂O', observations: 'Đá vôi tan dần, sủi bọt khí mạnh.', explanation: 'Axit mạnh đẩy axit yếu ra khỏi muối, tạo khí CO2.', safety: 'Khí CO2 có thể gây ngạt.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['nahco3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'NaHCO₃ + HCl → NaCl + CO₂↑ + H₂O', observations: 'Sủi bọt khí mãnh liệt ngay lập tức.', explanation: 'Phản ứng giữa muối cacbonat và axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['agno3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'AgNO₃ + HCl → AgCl↓ + HNO₃', observations: 'Xuất hiện kết tủa trắng dạng lơ lửng, không tan trong axit.', explanation: 'Tạo thành bạc clorua kết tủa.', safety: 'Bạc nitrat làm đen da.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['bacl2', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'BaCl₂ + H₂SO₄ → BaSO₄↓ + 2HCl', observations: 'Kết tủa trắng mịn xuất hiện ngay lập tức.', explanation: 'Tạo thành bari sunfat không tan.', safety: 'Muối bari độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+
+            // Muối + Muối (Kết tủa)
+            { reagents: ['bacl2', 'na2so4'], outcome: ReactionOutcome.Occurs, equation: 'BaCl₂ + Na₂SO₄ → BaSO₄↓ + 2NaCl', observations: 'Xuất hiện kết tủa trắng mịn ngay lập tức.', explanation: 'Phản ứng trao đổi ion tạo thành Bari Sunfat không tan.', safety: 'Muối Bari độc.', visual: { color: '#ffffff', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['agno3', 'nacl'], outcome: ReactionOutcome.Occurs, equation: 'AgNO₃ + NaCl → AgCl↓ + NaNO₃', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Phản ứng nhận biết ion clorua.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['cuso4', 'baoh2'], outcome: ReactionOutcome.Occurs, equation: 'CuSO₄ + Ba(OH)₂ → Cu(OH)₂↓ + BaSO₄↓', observations: 'Xuất hiện kết tủa hỗn hợp màu xanh lơ và trắng.', explanation: 'Cả hai sản phẩm đều là chất kết tủa.', safety: 'Bari hydroxit độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#60a5fa' } },
+            { reagents: ['agno3', 'ki'], outcome: ReactionOutcome.Occurs, equation: 'AgNO₃ + KI → AgI↓ + KNO₃', observations: 'Xuất hiện kết tủa màu vàng đậm.', explanation: 'Tạo thành bạc iotua kết tủa vàng.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#fde047' } },
+
+            // Muối + Bazơ
+            { reagents: ['cuso4', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'CuSO₄ + 2NaOH → Cu(OH)₂↓ + Na₂SO₄', observations: 'Xuất hiện kết tủa màu xanh lơ đặc trưng.', explanation: 'Tạo thành đồng(II) hydroxit không tan.', safety: 'Tránh dính vào mắt.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#3b82f6' } },
+            { reagents: ['fecl3', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'FeCl₃ + 3NaOH → Fe(OH)₃↓ + 3NaCl', observations: 'Xuất hiện kết tủa màu nâu đỏ.', explanation: 'Tạo thành sắt(III) hydroxit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#991b1b' } },
+            { reagents: ['feso4', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'FeSO₄ + 2NaOH → Fe(OH)₂↓ + Na₂SO₄', observations: 'Xuất hiện kết tủa màu trắng xanh, để lâu trong không khí chuyển dần sang nâu đỏ.', explanation: 'Tạo thành sắt(II) hydroxit.', safety: 'Dễ bị oxi hóa.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#dcfce7' } },
+            { reagents: ['alcl3', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'AlCl₃ + 3NaOH → Al(OH)₃↓ + 3NaCl', observations: 'Xuất hiện kết tủa trắng dạng keo. Nếu dư NaOH kết tủa sẽ tan.', explanation: 'Tạo thành nhôm hydroxit lưỡng tính.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+
+            // Kim loại + Muối
+            { reagents: ['fe', 'cuso4'], outcome: ReactionOutcome.Occurs, equation: 'Fe + CuSO₄ → FeSO₄ + Cu↓', observations: 'Đinh sắt tan một phần, có lớp kim loại màu đỏ gạch bám ngoài, màu xanh của dung dịch nhạt dần.', explanation: 'Sắt đứng trước Đồng trong dãy hoạt động hóa học nên đẩy được Đồng ra khỏi dung dịch muối.', safety: 'Tránh dính dung dịch muối đồng vào tay.', visual: { color: '#dcfce7', gas: false, heat: false, precipitate: '#b45309' } },
+            { reagents: ['zn', 'cuso4'], outcome: ReactionOutcome.Occurs, equation: 'Zn + CuSO₄ → ZnSO₄ + Cu↓', observations: 'Kẽm tan, có lớp đồng màu đỏ bám vào.', explanation: 'Kẽm đẩy đồng ra khỏi muối.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#b45309' } },
+            { reagents: ['cu', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'Cu + 2AgNO₃ → Cu(NO₃)₂ + 2Ag↓', observations: 'Đồng tan dần, dung dịch chuyển sang màu xanh, có lớp bạc sáng bám vào.', explanation: 'Đồng đẩy bạc ra khỏi muối.', safety: 'Bạc nitrat làm đen da.', visual: { color: '#3b82f6', gas: false, heat: false, precipitate: '#e2e8f0' } },
+
+            // Oxit + Nước / Axit / Bazơ
+            { reagents: ['na2o', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'Na₂O + H₂O → 2NaOH', observations: 'Oxit tan hoàn toàn, tỏa nhiệt.', explanation: 'Oxit bazơ phản ứng với nước tạo dung dịch kiềm.', safety: 'Tỏa nhiệt mạnh.', visual: { color: '#f1f5f9', gas: false, heat: true } },
+            { reagents: ['cao', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'CaO + H₂O → Ca(OH)₂', observations: 'Vôi sống nhão ra, tỏa nhiệt rất mạnh, bốc hơi nước.', explanation: 'Phản ứng tôi vôi.', safety: 'Dễ gây bỏng nhiệt.', visual: { color: '#ffffff', gas: false, heat: true } },
+            { reagents: ['p2o5', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'P₂O₅ + 3H₂O → 2H₃PO₄', observations: 'Chất bột trắng tan hết, tỏa nhiệt.', explanation: 'Oxit axit phản ứng với nước tạo axit.', safety: 'P2O5 háo nước mạnh.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['cuo', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'CuO + 2HCl → CuCl₂ + H₂O', observations: 'Bột đen tan dần, dung dịch chuyển sang màu xanh lá/xanh dương.', explanation: 'Oxit bazơ phản ứng với axit tạo muối và nước.', safety: 'Cần đun nóng nhẹ.', conditions: 'Nhiệt độ phòng hoặc đun nóng nhẹ', visual: { color: '#3b82f6', gas: false, heat: false } },
+            { reagents: ['fe2o3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Fe₂O₃ + 6HCl → 2FeCl₃ + 3H₂O', observations: 'Bột đỏ nâu tan dần, dung dịch chuyển sang màu vàng nâu.', explanation: 'Oxit sắt phản ứng với axit.', safety: 'An toàn.', visual: { color: '#b45309', gas: false, heat: false } },
+
+            // Khí + Khí / Dung dịch
+            { reagents: ['nh3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'NH₃ + HCl → NH₄Cl', observations: 'Hai khí gặp nhau tạo thành đám khói trắng dày đặc.', explanation: 'Phản ứng hóa hợp trực tiếp tạo thành muối amoni clorua ở dạng tinh thể cực nhỏ lơ lửng.', safety: 'Tránh hít phải khói muối amoni.', visual: { color: '#ffffff', gas: true, heat: false } },
+            { reagents: ['co2', 'caoh2'], outcome: ReactionOutcome.Occurs, equation: 'CO₂ + Ca(OH)₂ → CaCO₃↓ + H₂O', observations: 'Nước vôi trong bị vẩn đục trắng.', explanation: 'Tạo thành canxi cacbonat không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['so2', 'caoh2'], outcome: ReactionOutcome.Occurs, equation: 'SO₂ + Ca(OH)₂ → CaSO₃↓ + H₂O', observations: 'Nước vôi trong bị vẩn đục.', explanation: 'Tương tự CO2, tạo kết tủa canxi sunfit.', safety: 'SO2 có mùi hắc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+
+            // Oxi hóa - Khử & Phân hủy
+            { reagents: ['kmno4', 'hcl'], outcome: ReactionOutcome.Occurs, equation: '2KMnO₄ + 16HCl(đặc) → 2KCl + 2MnCl₂ + 5Cl₂↑ + 8H₂O', observations: 'Dung dịch thuốc tím mất màu, có khí màu vàng lục, mùi hắc thoát ra mạnh.', explanation: 'Phản ứng oxi hóa khử mạnh giải phóng khí Clo.', safety: 'Khí Clo cực độc! Bắt buộc làm trong tủ hút.', visual: { color: '#f1f5f9', gas: true, heat: true } },
+            { reagents: ['h2o2', 'kmno4'], outcome: ReactionOutcome.Occurs, equation: '2KMnO₄ + 3H₂O₂ → 2MnO₂↓ + 2KOH + 2H₂O + 3O₂↑', observations: 'Sủi bọt khí mạnh, thuốc tím mất màu, xuất hiện kết tủa đen.', explanation: 'H2O2 khử KMnO4.', safety: 'Phản ứng mạnh.', visual: { color: '#f8fafc', gas: true, heat: true, precipitate: '#1e293b' } },
+
+            // Hữu cơ
+            { reagents: ['c2h5oh', 'ch3cooh'], outcome: ReactionOutcome.Occurs, equation: 'CH₃COOH + C₂H₅OH ⇌ CH₃COOC₂H₅ + H₂O', observations: 'Dung dịch phân lớp, có mùi thơm đặc trưng của este.', explanation: 'Phản ứng este hóa với xúc tác axit sunfuric đặc.', safety: 'H2SO4 đặc gây bỏng nặng.', conditions: 'Xúc tác H₂SO₄ đặc, đun nóng', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['glucose', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'C₆H₁₂O₆ + 2AgNO₃ + 3NH₃ + H₂O → C₆H₁₁O₇NH₄ + 2Ag↓ + 2NH₄NO₃', observations: 'Có lớp bạc kim loại sáng bóng bám vào thành ống nghiệm.', explanation: 'Phản ứng tráng gương của glucose.', safety: 'Cẩn thận với bạc nitrat.', conditions: 'Môi trường NH₃, đun nóng nhẹ', visual: { color: '#f1f5f9', gas: false, heat: true, precipitate: '#e2e8f0' } },
+            { reagents: ['ch4', 'o2'], outcome: ReactionOutcome.Occurs, equation: 'CH₄ + 2O₂ → CO₂ + 2H₂O', observations: 'Cháy với ngọn lửa màu xanh, tỏa nhiều nhiệt.', explanation: 'Phản ứng cháy của hydrocacbon.', safety: 'Nguy cơ cháy nổ cao.', conditions: 'Nhiệt độ cao (đốt cháy)', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['c2h2', 'o2'], outcome: ReactionOutcome.Occurs, equation: '2C₂H₂ + 5O₂ → 4CO₂ + 2H₂O', observations: 'Cháy mãnh liệt, tỏa nhiệt cực lớn.', explanation: 'Phản ứng cháy của axetilen.', safety: 'Nhiệt độ ngọn lửa rất cao.', conditions: 'Đốt cháy', visual: { color: '#f8fafc', gas: true, heat: true } },
+
+            // --- PHẢN ỨNG KHÔNG XẢY RA (NO REACTION) ---
+            { reagents: ['cu', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Đồng đứng sau Hidro trong dãy hoạt động hóa học nên không phản ứng với HCl loãng.' },
+            { reagents: ['ag', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc không phản ứng với axit HCl.' },
+            { reagents: ['au', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Vàng là kim loại rất trơ, không tan trong axit HCl.' },
+            { reagents: ['cu', 'h2so4'], outcome: ReactionOutcome.NoReaction, explanation: 'Đồng không phản ứng với H2SO4 loãng.' },
+            { reagents: ['nacl', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng giữa muối clorua và axit clohydric.' },
+            { reagents: ['agno3', 'hno3'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng xảy ra.' },
+            { reagents: ['fe', 'naoh'], outcome: ReactionOutcome.NoReaction, explanation: 'Sắt không phản ứng với dung dịch kiềm ở điều kiện thường.' },
+            { reagents: ['cu', 'naoh'], outcome: ReactionOutcome.NoReaction, explanation: 'Đồng không phản ứng với dung dịch kiềm.' },
+            { reagents: ['caco3', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Canxi cacbonat không tan trong nước và không phản ứng ở điều kiện thường.' },
+            { reagents: ['sio2', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Cát không tan và không phản ứng với nước.' },
+
+            // --- CHƯA XÁC ĐỊNH / PHỨC TẠP (UNDETERMINED) ---
+            { reagents: ['hg', 'h2so4'], outcome: ReactionOutcome.Undetermined, explanation: 'Phản ứng phụ thuộc mạnh vào nồng độ axit và nhiệt độ, có thể tạo ra nhiều sản phẩm khác nhau.' },
+            { reagents: ['c6h6', 'hcl'], outcome: ReactionOutcome.Undetermined, explanation: 'Benzen không phản ứng trực tiếp với HCl ở điều kiện thường, cần xúc tác và điều kiện đặc biệt.' },
+            { reagents: ['p', 's'], outcome: ReactionOutcome.Undetermined, explanation: 'Phản ứng tạo ra các hợp chất sunfua phốt pho phức tạp, cần kiểm soát nhiệt độ nghiêm ngặt.' },
+            { reagents: ['cu', 'h2so4_dac'], outcome: ReactionOutcome.Occurs, equation: 'Cu + 2H₂SO₄(đặc) → CuSO₄ + SO₂↑ + 2H₂O', observations: 'Đồng tan, dung dịch chuyển xanh, có khí mùi hắc thoát ra.', explanation: 'Axit sunfuric đặc oxi hóa đồng tạo khí SO2.', safety: 'Khí SO2 độc, axit đặc gây bỏng.', conditions: 'Đun nóng', visual: { color: '#3b82f6', gas: true, heat: true } },
+            { reagents: ['cu', 'hno3_dac'], outcome: ReactionOutcome.Occurs, equation: 'Cu + 4HNO₃(đặc) → Cu(NO₃)₂ + 2NO₂↑ + 2H₂O', observations: 'Phản ứng mãnh liệt, khí màu nâu đỏ thoát ra, dung dịch xanh.', explanation: 'HNO3 đặc oxi hóa đồng giải phóng khí NO2.', safety: 'Khí NO2 cực độc!', visual: { color: '#3b82f6', gas: true, heat: true } },
+            { reagents: ['cu', 'hno3'], outcome: ReactionOutcome.Occurs, equation: '3Cu + 8HNO₃(loãng) → 3Cu(NO₃)₂ + 2NO↑ + 4H₂O', observations: 'Đồng tan, có khí không màu thoát ra rồi hóa nâu trong không khí.', explanation: 'HNO3 loãng oxi hóa đồng tạo khí NO, NO gặp O2 tạo NO2 nâu.', safety: 'Khí NO/NO2 độc.', visual: { color: '#3b82f6', gas: true, heat: false } },
+            { reagents: ['nh4cl', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'NH₄Cl + NaOH → NaCl + NH₃↑ + H₂O', observations: 'Có khí mùi khai thoát ra.', explanation: 'Muối amoni phản ứng với kiềm giải phóng khí amoniac.', safety: 'Khí NH3 kích ứng mạnh.', conditions: 'Đun nóng nhẹ', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['agno3', 'na3po4'], outcome: ReactionOutcome.Occurs, equation: '3AgNO₃ + Na₃PO₄ → Ag₃PO₄↓ + 3NaNO₃', observations: 'Xuất hiện kết tủa màu vàng.', explanation: 'Tạo thành bạc photphat kết tủa vàng.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#facc15' } },
+            { reagents: ['naoh', 'aloh3'], outcome: ReactionOutcome.Occurs, equation: 'NaOH + Al(OH)₃ → NaAlO₂ + 2H₂O', observations: 'Kết tủa trắng tan dần tạo dung dịch trong suốt.', explanation: 'Nhôm hydroxit có tính lưỡng tính tan trong kiềm mạnh.', safety: 'Kiềm ăn mòn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['naoh', 'al'], outcome: ReactionOutcome.Occurs, equation: '2Al + 2NaOH + 2H₂O → 2NaAlO₂ + 3H₂↑', observations: 'Nhôm tan nhanh, sủi bọt khí mạnh.', explanation: 'Nhôm phản ứng với dung dịch kiềm giải phóng Hidro.', safety: 'Khí Hidro dễ cháy.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['fe', 'cl2'], outcome: ReactionOutcome.Occurs, equation: '2Fe + 3Cl₂ → 2FeCl₃', observations: 'Sắt cháy sáng trong khí clo tạo khói màu nâu đỏ.', explanation: 'Sắt bị clo oxi hóa lên mức cao nhất.', safety: 'Khí clo rất độc.', conditions: 'Nhiệt độ cao', visual: { color: '#b45309', gas: true, heat: true } },
+            { reagents: ['cu', 'cl2'], outcome: ReactionOutcome.Occurs, equation: 'Cu + Cl₂ → CuCl₂', observations: 'Đồng cháy sáng, tạo khói màu trắng/xanh.', explanation: 'Đồng phản ứng với clo.', safety: 'Khí clo độc.', conditions: 'Nhiệt độ cao', visual: { color: '#0d9488', gas: true, heat: true } },
+            { reagents: ['h2', 'cl2'], outcome: ReactionOutcome.Occurs, equation: 'H₂ + Cl₂ → 2HCl', observations: 'Hỗn hợp nổ hoặc cháy sáng tạo khói trắng.', explanation: 'Phản ứng tạo khí hidro clorua.', safety: 'Nguy cơ nổ mạnh.', conditions: 'Ánh sáng hoặc nhiệt độ', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['s', 'o2'], outcome: ReactionOutcome.Occurs, equation: 'S + O₂ → SO₂', observations: 'Lưu huỳnh cháy với ngọn lửa xanh nhạt, có mùi hắc.', explanation: 'Tạo khí lưu huỳnh đioxit.', safety: 'Khí SO2 độc.', conditions: 'Nhiệt độ cao', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['p', 'o2'], outcome: ReactionOutcome.Occurs, equation: '4P + 5O₂ → 2P₂O₅', observations: 'Phốt pho cháy sáng chói tạo khói trắng dày đặc.', explanation: 'Tạo điphotpho pentaoxit.', safety: 'Khói P2O5 kích ứng.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['mg', 'o2'], outcome: ReactionOutcome.Occurs, equation: '2Mg + O₂ → 2MgO', observations: 'Magiê cháy sáng chói (như đèn flash).', explanation: 'Tạo magie oxit.', safety: 'Ánh sáng cực mạnh gây hại mắt.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['fe', 'o2'], outcome: ReactionOutcome.Occurs, equation: '3Fe + 2O₂ → Fe₃O₄', observations: 'Sắt cháy sáng, không ngọn lửa, tạo các hạt nóng chảy màu đen.', explanation: 'Tạo oxit sắt từ.', safety: 'Bắn tia lửa nóng.', conditions: 'Nhiệt độ cao', visual: { color: '#1e293b', gas: true, heat: true } },
+            { reagents: ['c2h5oh', 'na'], outcome: ReactionOutcome.Occurs, equation: '2C₂H₅OH + 2Na → 2C₂H₅ONa + H₂↑', observations: 'Natri tan dần, sủi bọt khí không màu.', explanation: 'Nhóm -OH của rượu phản ứng với kim loại kiềm.', safety: 'Khí Hidro dễ cháy.', visual: { color: 'transparent', gas: true, heat: false } },
+            { reagents: ['ch3cooh', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'CH₃COOH + NaOH → CH₃COONa + H₂O', observations: 'Tỏa nhiệt nhẹ.', explanation: 'Phản ứng trung hòa axit-bazơ.', safety: 'An toàn.', visual: { color: 'transparent', gas: false, heat: true } },
+            { reagents: ['ch3cooh', 'nahco3'], outcome: ReactionOutcome.Occurs, equation: 'CH₃COOH + NaHCO₃ → CH₃COONa + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh ngay lập tức.', explanation: 'Axit axetic đẩy CO2 ra khỏi muối cacbonat.', safety: 'An toàn.', visual: { color: 'transparent', gas: true, heat: false } },
+            { reagents: ['cu', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Đồng không phản ứng với nước ở bất kỳ nhiệt độ nào.' },
+            { reagents: ['ag', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc không phản ứng với nước.' },
+            { reagents: ['fe', 'nacl'], outcome: ReactionOutcome.NoReaction, explanation: 'Sắt không đẩy được Natri ra khỏi muối.' },
+            { reagents: ['zn', 'mgso4'], outcome: ReactionOutcome.NoReaction, explanation: 'Kẽm hoạt động hóa học yếu hơn Magiê.' },
+            { reagents: ['kmno4', 'fe'], outcome: ReactionOutcome.Undetermined, explanation: 'Phản ứng oxi hóa khử phức tạp, sản phẩm phụ thuộc vào môi trường axit/bazơ/trung tính.' },
+            { reagents: ['al', 'fe2o3'], outcome: ReactionOutcome.Occurs, equation: '2Al + Fe₂O₃ → Al₂O₃ + 2Fe', observations: 'Phản ứng tỏa nhiệt cực mạnh, hỗn hợp nóng chảy sáng chói.', explanation: 'Phản ứng nhiệt nhôm dùng để hàn đường ray.', safety: 'Cực kỳ nóng, bắn tia lửa.', conditions: 'Nhiệt độ rất cao', visual: { color: '#1e293b', gas: false, heat: true } },
+            { reagents: ['cl2', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'Cl₂ + H₂O ⇌ HCl + HClO', observations: 'Dung dịch chuyển màu vàng lục nhạt, có mùi hắc của clo.', explanation: 'Clo phản ứng thuận nghịch với nước tạo nước clo có tính tẩy màu.', safety: 'Khí clo độc.', visual: { color: '#fef08a', gas: false, heat: false } },
+            { reagents: ['cl2', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'Cl₂ + 2NaOH → NaCl + NaClO + H₂O', observations: 'Dung dịch clo mất màu vàng lục.', explanation: 'Tạo thành nước Javel có tính tẩy rửa mạnh.', safety: 'Nước Javel ăn mòn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['so2', 'o2'], outcome: ReactionOutcome.Occurs, equation: '2SO₂ + O₂ ⇌ 2SO₃', observations: 'Không có hiện tượng mắt thường thấy rõ.', explanation: 'Phản ứng oxi hóa SO2 thành SO3 trong sản xuất H2SO4.', safety: 'Cần xúc tác V2O5.', conditions: '450°C, xúc tác V₂O₅', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['so3', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'SO₃ + H₂O → H₂SO₄', observations: 'Phản ứng mãnh liệt, tỏa nhiệt rất mạnh, tạo màn sương axit.', explanation: 'SO3 là oxit axit của H2SO4.', safety: 'Cực kỳ nguy hiểm, tạo sương mù axit ăn mòn.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['fecl3', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'FeCl₃ + 3AgNO₃ → 3AgCl↓ + Fe(NO₃)₃', observations: 'Xuất hiện kết tủa trắng lơ lửng, dung dịch chuyển sang màu vàng nhạt.', explanation: 'Phản ứng trao đổi tạo bạc clorua không tan.', safety: 'An toàn.', visual: { color: '#fde68a', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['baoh2', 'nh4cl'], outcome: ReactionOutcome.Occurs, equation: 'Ba(OH)₂ + 2NH₄Cl → BaCl₂ + 2NH₃↑ + 2H₂O', observations: 'Có khí mùi khai thoát ra, ống nghiệm lạnh đi (phản ứng thu nhiệt).', explanation: 'Phản ứng giữa kiềm và muối amoni.', safety: 'Khí NH3 độc.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['co2', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'CO₂ + 2NaOH → Na₂CO₃ + H₂O', observations: 'Không có hiện tượng rõ rệt.', explanation: 'Khí CO2 bị hấp thụ bởi dung dịch kiềm.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['so2', 'br2'], outcome: ReactionOutcome.Occurs, equation: 'SO₂ + Br₂ + 2H₂O → H₂SO₄ + 2HBr', observations: 'Dung dịch Brom mất màu đỏ nâu.', explanation: 'SO2 làm mất màu nước Brom, dùng để nhận biết SO2.', safety: 'Brom độc và ăn mòn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            
+            // --- BỔ SUNG THÊM PHẢN ỨNG ---
+            { reagents: ['starch', 'i2'], outcome: ReactionOutcome.Occurs, equation: 'Tinh bột + I₂ → Hợp chất màu xanh tím', observations: 'Dung dịch chuyển sang màu xanh tím đặc trưng. Khi đun nóng màu biến mất, để nguội màu xuất hiện trở lại.', explanation: 'Iốt len lỏi vào cấu trúc xoắn của tinh bột tạo màu.', safety: 'An toàn.', visual: { color: '#1e3a8a', gas: false, heat: false } },
+            { reagents: ['phenol', 'br2'], outcome: ReactionOutcome.Occurs, equation: 'C₆H₅OH + 3Br₂ → C₆H₂Br₃OH↓ + 3HBr', observations: 'Xuất hiện kết tủa trắng ngay lập tức, nước brom mất màu.', explanation: 'Phản ứng thế vào vòng benzen của phenol.', safety: 'Phenol và Brom đều rất độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['aniline', 'br2'], outcome: ReactionOutcome.Occurs, equation: 'C₆H₅NH₂ + 3Br₂ → C₆H₂Br₃NH₂↓ + 3HBr', observations: 'Xuất hiện kết tủa trắng.', explanation: 'Tương tự phenol, nhóm -NH2 làm vòng benzen dễ thế hơn.', safety: 'Aniline độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['protein', 'hno3'], outcome: ReactionOutcome.Occurs, equation: 'Protein + HNO₃ → Hợp chất màu vàng', observations: 'Xuất hiện màu vàng đặc trưng trên protein (lòng trắng trứng).', explanation: 'Phản ứng xantoprotein đặc trưng của protein có vòng thơm.', safety: 'HNO3 ăn mòn.', visual: { color: '#facc15', gas: false, heat: false } },
+            { reagents: ['nahso4', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'NaHSO₄ + NaOH → Na₂SO₄ + H₂O', observations: 'Tỏa nhiệt nhẹ.', explanation: 'Phản ứng trung hòa giữa muối axit mạnh và bazơ mạnh.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['nahso4', 'nahco3'], outcome: ReactionOutcome.Occurs, equation: 'NaHSO₄ + NaHCO₃ → Na₂SO₄ + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Ion H+ trong NaHSO4 đẩy CO2 ra khỏi muối cacbonat.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['cahco32', 'caoh2'], outcome: ReactionOutcome.Occurs, equation: 'Ca(HCO₃)₂ + Ca(OH)₂ → 2CaCO₃↓ + 2H₂O', observations: 'Xuất hiện kết tủa trắng.', explanation: 'Chuyển muối axit thành muối trung hòa không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['na2s', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Na₂S + 2HCl → 2NaCl + H₂S↑', observations: 'Sủi bọt khí có mùi trứng thối cực kỳ khó chịu.', explanation: 'Axit mạnh đẩy axit yếu ra khỏi muối.', safety: 'H2S cực độc! Nguy hiểm chết người.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['na2so3', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Na₂SO₃ + H₂SO₄ → Na₂SO₄ + SO₂↑ + H₂O', observations: 'Sủi bọt khí mùi hắc.', explanation: 'Giải phóng khí lưu huỳnh đioxit.', safety: 'Khí SO2 độc.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['kmno4', 'fe2o3'], outcome: ReactionOutcome.NoReaction, explanation: 'Sắt(III) oxit đã ở mức oxi hóa cao nhất, không bị KMnO4 oxi hóa thêm.' },
+            { reagents: ['k2cr2o7', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'K₂Cr₂O₇ + 14HCl → 2KCl + 2CrCl₃ + 3Cl₂↑ + 7H₂O', observations: 'Dung dịch chuyển từ da cam sang xanh lá cây, có khí vàng lục thoát ra.', explanation: 'K2Cr2O7 oxi hóa HCl thành Cl2.', safety: 'Khí Clo độc, Cr(VI) độc.', visual: { color: '#166534', gas: true, heat: true } },
+            { reagents: ['k2cro4', 'baoh2'], outcome: ReactionOutcome.Occurs, equation: 'K₂CrO₄ + Ba(OH)₂ → BaCrO₄↓ + 2KOH', observations: 'Xuất hiện kết tủa màu vàng tươi.', explanation: 'Tạo thành Bari Cromat không tan.', safety: 'Cromat rất độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#facc15' } },
+            { reagents: ['agcl', 'hno3'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc clorua không tan trong axit nitric.' },
+            { reagents: ['baso4', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Bari sunfat không tan trong axit mạnh.' },
+            { reagents: ['fe', 'h2so4_dac'], outcome: ReactionOutcome.Occurs, equation: '2Fe + 6H₂SO₄(đặc) → Fe₂(SO₄)₃ + 3SO₂↑ + 6H₂O', observations: 'Sắt tan, sủi bọt khí mùi hắc, tỏa nhiệt.', explanation: 'Sắt bị oxi hóa lên mức +3 bởi axit đặc nóng.', safety: 'Sắt bị thụ động hóa trong H2SO4 đặc nguội.', conditions: 'Đun nóng', visual: { color: '#fde68a', gas: true, heat: true } },
+            { reagents: ['al', 'h2so4_dac'], outcome: ReactionOutcome.Occurs, equation: '2Al + 6H₂SO₄(đặc) → Al₂(SO₄)₃ + 3SO₂↑ + 6H₂O', observations: 'Nhôm tan mạnh, sủi bọt khí.', explanation: 'Nhôm phản ứng với axit đặc nóng.', safety: 'Nhôm bị thụ động hóa trong H2SO4 đặc nguội.', conditions: 'Đun nóng', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['c2h4', 'br2'], outcome: ReactionOutcome.Occurs, equation: 'C₂H₄ + Br₂ → C₂H₄Br₂', observations: 'Dung dịch Brom mất màu đỏ nâu.', explanation: 'Phản ứng cộng vào liên kết đôi của etilen.', safety: 'Brom độc.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['c2h2', 'br2'], outcome: ReactionOutcome.Occurs, equation: 'C₂H₂ + 2Br₂ → C₂H₂Br₄', observations: 'Dung dịch Brom mất màu rất nhanh.', explanation: 'Phản ứng cộng vào liên kết ba của axetilen.', safety: 'Brom độc.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['c2h2', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'C₂H₂ + 2AgNO₃ + 2NH₃ → Ag₂C₂↓ + 2NH₄NO₃', observations: 'Xuất hiện kết tủa màu vàng nhạt.', explanation: 'Phản ứng thế nguyên tử H linh động của ank-1-in.', safety: 'Bạc axetilua dễ nổ khi khô.', conditions: 'Môi trường NH₃', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#fef08a' } },
+            { reagents: ['glucose', 'cuoh2'], outcome: ReactionOutcome.Occurs, equation: 'C₆H₁₂O₆ + 2Cu(OH)₂ + NaOH → C₆H₁₁O₇Na + Cu₂O↓ + 3H₂O', observations: 'Xuất hiện kết tủa màu đỏ gạch.', explanation: 'Glucose khử Cu(II) thành Cu(I).', safety: 'An toàn.', conditions: 'Đun nóng', visual: { color: '#f8fafc', gas: false, heat: true, precipitate: '#991b1b' } },
+            { reagents: ['glycerol', 'cuoh2'], outcome: ReactionOutcome.Occurs, equation: '2C₃H₅(OH)₃ + Cu(OH)₂ → [C₃H₅(OH)₂O]₂Cu + 2H₂O', observations: 'Kết tủa xanh tan tạo dung dịch màu xanh lam thẫm trong suốt.', explanation: 'Phản ứng đặc trưng của ancol đa chức có các nhóm -OH kề nhau.', safety: 'An toàn.', visual: { color: '#1e3a8a', gas: false, heat: false } },
+            { reagents: ['sucrose', 'h2so4_dac'], outcome: ReactionOutcome.Occurs, equation: 'C₁₂H₂₂O₁₁ → 12C + 11H₂O', observations: 'Đường bị than hóa, cột carbon đen ngòm dâng cao khỏi cốc, bốc khói trắng.', explanation: 'Tính háo nước cực mạnh của H2SO4 đặc.', safety: 'Cực kỳ nguy hiểm! Tỏa nhiệt và khí độc.', visual: { color: '#000000', gas: true, heat: true } },
+            { reagents: ['kmno4', 'na2so3'], outcome: ReactionOutcome.Occurs, equation: '2KMnO₄ + 5Na₂SO₃ + 3H₂SO₄ → 2MnSO₄ + 5Na₂SO₄ + K₂SO₄ + 3H₂O', observations: 'Dung dịch thuốc tím mất màu.', explanation: 'Phản ứng oxi hóa khử trong môi trường axit.', safety: 'Cần môi trường axit.', conditions: 'Có mặt H₂SO₄', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['k2cr2o7', 'feso4'], outcome: ReactionOutcome.Occurs, equation: 'K₂Cr₂O₇ + 6FeSO₄ + 7H₂SO₄ → Cr₂(SO₄)₃ + 3Fe₂(SO₄)₃ + K₂SO₄ + 7H₂O', observations: 'Dung dịch chuyển từ da cam sang xanh lá cây.', explanation: 'Cr(VI) bị khử thành Cr(III), Fe(II) bị oxi hóa thành Fe(III).', safety: 'Cr(VI) độc.', conditions: 'Có mặt H₂SO₄', visual: { color: '#166534', gas: false, heat: false } },
+            { reagents: ['nahso3', 'kmno4'], outcome: ReactionOutcome.Occurs, equation: '5NaHSO₃ + 2KMnO₄ + 3H₂SO₄ → 2MnSO₄ + 5NaHSO₄ + K₂SO₄ + 3H₂O', observations: 'Mất màu thuốc tím.', explanation: 'Phản ứng oxi hóa khử.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['caco3', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'CaCO₃ + H₂O + CO₂ ⇌ Ca(HCO₃)₂', observations: 'Kết tủa trắng tan dần tạo dung dịch trong suốt.', explanation: 'Sự xâm thực của nước mưa chứa CO2 đối với đá vôi.', safety: 'Phản ứng thuận nghịch.', conditions: 'Dư CO₂', visual: { color: 'transparent', gas: false, heat: false } },
+            { reagents: ['mghco32', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'Mg(HCO₃)₂ + 2NaOH → Mg(OH)₂↓ + Na₂CO₃ + H₂O', observations: 'Xuất hiện kết tủa trắng.', explanation: 'Tạo magie hydroxit không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['na2co3', 'cacl2'], outcome: ReactionOutcome.Occurs, equation: 'Na₂CO₃ + CaCl₂ → CaCO₃↓ + 2NaCl', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Phản ứng trao đổi ion.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['k2co3', 'bacl2'], outcome: ReactionOutcome.Occurs, equation: 'K₂CO₃ + BaCl₂ → BaCO₃↓ + 2KCl', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Phản ứng trao đổi ion.', safety: 'Muối bari độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['zn', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'Zn + 2NaOH + 2H₂O → Na₂[Zn(OH)₄] + H₂↑', observations: 'Kẽm tan, sủi bọt khí.', explanation: 'Kẽm có tính lưỡng tính, tan trong kiềm mạnh.', safety: 'Khí Hidro dễ cháy.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['al2o3', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'Al₂O₃ + 2NaOH → 2NaAlO₂ + H₂O', observations: 'Bột trắng tan dần.', explanation: 'Oxit nhôm lưỡng tính tan trong kiềm.', safety: 'Kiềm ăn mòn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['zno', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'ZnO + 2HCl → ZnCl₂ + H₂O', observations: 'Bột trắng tan hết.', explanation: 'Oxit bazơ phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['mgo', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'MgO + H₂SO₄ → MgSO₄ + H₂O', observations: 'Bột trắng tan hết.', explanation: 'Oxit bazơ phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['fes2', 'o2'], outcome: ReactionOutcome.Occurs, equation: '4FeS₂ + 11O₂ → 2Fe₂O₃ + 8SO₂↑', observations: 'Cháy sáng, tỏa nhiệt mạnh, có khí mùi hắc thoát ra.', explanation: 'Phản ứng đốt quặng pirit sắt.', safety: 'Khí SO2 rất độc.', conditions: 'Nhiệt độ cao', visual: { color: '#991b1b', gas: true, heat: true } },
+            { reagents: ['cu2o', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Cu₂O + 2HCl → CuCl₂ + Cu↓ + H₂O', observations: 'Bột đỏ tan, xuất hiện kim loại đỏ và dung dịch xanh.', explanation: 'Phản ứng tự oxi hóa khử của Cu(I) trong môi trường axit.', safety: 'An toàn.', visual: { color: '#3b82f6', gas: false, heat: false, precipitate: '#b45309' } },
+            { reagents: ['cr2o3', 'al'], outcome: ReactionOutcome.Occurs, equation: 'Cr₂O₃ + 2Al → Al₂O₃ + 2Cr', observations: 'Phản ứng tỏa nhiệt mạnh.', explanation: 'Phản ứng nhiệt nhôm điều chế Crom.', safety: 'Cực nóng.', conditions: 'Nhiệt độ rất cao', visual: { color: '#1e293b', gas: false, heat: true } },
+            { reagents: ['hf', 'sio2'], outcome: ReactionOutcome.Occurs, equation: 'SiO₂ + 4HF → SiF₄↑ + 2H₂O', observations: 'Cát (thủy tinh) bị hòa tan.', explanation: 'Phản ứng đặc trưng dùng để khắc chữ lên thủy tinh.', safety: 'HF cực độc và ăn mòn xương.', visual: { color: 'transparent', gas: true, heat: false } },
+            { reagents: ['k2co3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'K₂CO₃ + 2HCl → 2KCl + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Axit mạnh đẩy axit yếu ra khỏi muối.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['mgco3', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'MgCO₃ + H₂SO₄ → MgSO₄ + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Axit mạnh đẩy axit yếu ra khỏi muối.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['znco3', 'hno3'], outcome: ReactionOutcome.Occurs, equation: 'ZnCO₃ + 2HNO₃ → Zn(NO₃)₂ + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Axit mạnh đẩy axit yếu ra khỏi muối.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['cr2o3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Cr₂O₃ + 6HCl → 2CrCl₃ + 3H₂O', observations: 'Bột xanh lục tan dần, dung dịch chuyển sang màu xanh tím.', explanation: 'Oxit bazơ phản ứng với axit.', safety: 'Cần đun nóng.', conditions: 'Đun nóng', visual: { color: '#4c1d95', gas: false, heat: true } },
+            { reagents: ['k2cro4', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'K₂CrO₄ + 2AgNO₃ → Ag₂CrO₄↓ + 2KNO₃', observations: 'Xuất hiện kết tủa màu đỏ gạch.', explanation: 'Tạo thành bạc cromat không tan.', safety: 'Cromat rất độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#991b1b' } },
+            { reagents: ['na2s', 'cuso4'], outcome: ReactionOutcome.Occurs, equation: 'Na₂S + CuSO₄ → CuS↓ + Na₂SO₄', observations: 'Xuất hiện kết tủa màu đen.', explanation: 'Tạo thành đồng(II) sunfua không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#000000' } },
+            { reagents: ['na2so3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Na₂SO₃ + 2HCl → 2NaCl + SO₂↑ + H₂O', observations: 'Sủi bọt khí mùi hắc.', explanation: 'Axit mạnh đẩy axit yếu ra khỏi muối.', safety: 'Khí SO2 độc.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['nahso4', 'na2co3'], outcome: ReactionOutcome.Occurs, equation: '2NaHSO₄ + Na2CO₃ → 2Na₂SO₄ + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Ion H+ trong NaHSO4 đẩy CO2 ra khỏi muối cacbonat.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['sucrose', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'C₁₂H₂₂O₁₁ + H₂O → C₆H₁₂O₆ + C₆H₁₂O₆', observations: 'Không có hiện tượng rõ rệt bằng mắt thường.', explanation: 'Phản ứng thủy phân đường sucrose thành glucose và fructose.', safety: 'Cần xúc tác axit và đun nóng.', conditions: 'Xúc tác H⁺, đun nóng', visual: { color: 'transparent', gas: false, heat: true } },
+            { reagents: ['caoh2', 'cl2'], outcome: ReactionOutcome.Occurs, equation: '2Ca(OH)₂ + 2Cl₂ → Ca(ClO)₂ + CaCl₂ + 2H₂O', observations: 'Chất rắn màu trắng ngả vàng (clorua vôi) được tạo thành.', explanation: 'Phản ứng tạo chất tẩy trắng và sát trùng.', safety: 'Khí Clo độc.', visual: { color: '#fef08a', gas: false, heat: false } },
+            { reagents: ['nh3', 'o2'], outcome: ReactionOutcome.Occurs, equation: '4NH₃ + 5O₂ → 4NO + 6H₂O', observations: 'Ngọn lửa cháy sáng, nếu có xúc tác Pt sẽ thấy khói màu nâu đỏ (NO2) sau đó.', explanation: 'Oxi hóa amoniac.', safety: 'NH3 kích ứng.', conditions: '850°C, xúc tác Pt', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['k2cr2o7', 'h2so4_dac'], outcome: ReactionOutcome.Occurs, equation: 'K₂Cr₂O₇ + H₂SO₄(đặc) + 3C₂H₅OH → Cr₂(SO₄)₃ + 3CH₃CHO + K₂SO₄ + 7H₂O', observations: 'Dung dịch chuyển từ da cam sang xanh lá cây, có mùi táo của andehit.', explanation: 'Oxi hóa rượu bằng dicromat.', safety: 'Cr(VI) cực độc.', conditions: 'Đun nóng', visual: { color: '#166534', gas: false, heat: true } },
+            { reagents: ['baoh2', 'co2'], outcome: ReactionOutcome.Occurs, equation: 'Ba(OH)₂ + CO₂ → BaCO₃↓ + H₂O', observations: 'Dung dịch vẩn đục trắng.', explanation: 'Tạo thành Bari cacbonat không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['naoh', 'so2'], outcome: ReactionOutcome.Occurs, equation: '2NaOH + SO₂ → Na₂SO₃ + H₂O', observations: 'Không có hiện tượng rõ rệt.', explanation: 'Tạo thành Natri sunfit tan.', safety: 'Khí SO2 độc.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['al', 'cl2'], outcome: ReactionOutcome.Occurs, equation: '2Al + 3Cl₂ → 2AlCl₃', observations: 'Nhôm cháy sáng trong khí clo tạo khói trắng.', explanation: 'Nhôm bị clo oxi hóa.', safety: 'Khí clo độc.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['zn', 's'], outcome: ReactionOutcome.Occurs, equation: 'Zn + S → ZnS', observations: 'Hỗn hợp cháy sáng mạnh.', explanation: 'Kẽm phản ứng với lưu huỳnh.', safety: 'Tỏa nhiệt mạnh.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: false, heat: true, precipitate: '#ffffff' } },
+            { reagents: ['fe', 's'], outcome: ReactionOutcome.Occurs, equation: 'Fe + S → FeS', observations: 'Hỗn hợp nóng đỏ, tạo thành chất rắn màu đen.', explanation: 'Sắt phản ứng với lưu huỳnh.', safety: 'An toàn.', conditions: 'Nhiệt độ cao', visual: { color: '#000000', gas: false, heat: true, precipitate: '#000000' } },
+            { reagents: ['h2', 's'], outcome: ReactionOutcome.Occurs, equation: 'H₂ + S → H₂S', observations: 'Khí có mùi trứng thối thoát ra.', explanation: 'Hidro phản ứng với lưu huỳnh.', safety: 'Khí H2S cực độc.', conditions: 'Nhiệt độ cao', visual: { color: 'transparent', gas: true, heat: false } },
+            { reagents: ['na', 'cl2'], outcome: ReactionOutcome.Occurs, equation: '2Na + Cl₂ → 2NaCl', observations: 'Natri cháy sáng chói trong khí clo tạo khói trắng.', explanation: 'Tạo thành muối ăn.', safety: 'Khí clo độc.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['mg', 'cl2'], outcome: ReactionOutcome.Occurs, equation: 'Mg + Cl₂ → MgCl₂', observations: 'Magiê cháy sáng mạnh.', explanation: 'Tạo magie clorua.', safety: 'Khí clo độc.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['ca', 'cl2'], outcome: ReactionOutcome.Occurs, equation: 'Ca + Cl₂ → CaCl₂', observations: 'Canxi cháy sáng.', explanation: 'Tạo canxi clorua.', safety: 'Khí clo độc.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['baoh2', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Ba(OH)₂ + H₂SO₄ → BaSO₄↓ + 2H₂O', observations: 'Xuất hiện kết tủa trắng mịn.', explanation: 'Phản ứng trung hòa tạo kết tủa.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true, precipitate: '#ffffff' } },
+            { reagents: ['naoh', 'h3po4'], outcome: ReactionOutcome.Occurs, equation: '3NaOH + H₃PO₄ → Na₃PO₄ + 3H₂O', observations: 'Tỏa nhiệt.', explanation: 'Phản ứng trung hòa.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['caoh2', 'h3po4'], outcome: ReactionOutcome.Occurs, equation: '3Ca(OH)₂ + 2H₃PO₄ → Ca₃(PO₄)₂↓ + 6H₂O', observations: 'Xuất hiện kết tủa trắng.', explanation: 'Tạo canxi photphat không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true, precipitate: '#ffffff' } },
+            
+            // --- NEW REACTIONS BATCH 2 ---
+            { reagents: ['mg', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Mg + H₂SO₄(loãng) → MgSO₄ + H₂↑', observations: 'Magiê tan nhanh, sủi bọt khí mạnh.', explanation: 'Magiê đẩy Hidro ra khỏi axit sunfuric loãng.', safety: 'Khí Hidro dễ cháy.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['zn', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Zn + H₂SO₄(loãng) → ZnSO₄ + H₂↑', observations: 'Kẽm tan, sủi bọt khí.', explanation: 'Kẽm phản ứng với axit sunfuric loãng.', safety: 'Tránh lửa.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['al', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: '2Al + 3H₂SO₄(loãng) → Al₂(SO₄)₃ + 3H₂↑', observations: 'Nhôm tan, sủi bọt khí mạnh.', explanation: 'Nhôm đẩy Hidro ra khỏi axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['al', 'cuso4'], outcome: ReactionOutcome.Occurs, equation: '2Al + 3CuSO₄ → Al₂(SO₄)₃ + 3Cu↓', observations: 'Nhôm tan, có lớp đồng màu đỏ bám vào, màu xanh dung dịch nhạt dần.', explanation: 'Nhôm đẩy đồng ra khỏi muối.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#b45309' } },
+            { reagents: ['mg', 'cuso4'], outcome: ReactionOutcome.Occurs, equation: 'Mg + CuSO₄ → MgSO₄ + Cu↓', observations: 'Magiê tan, đồng bám vào.', explanation: 'Magiê đẩy đồng.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#b45309' } },
+            { reagents: ['na2co3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Na₂CO₃ + 2HCl → 2NaCl + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Axit mạnh đẩy axit yếu ra khỏi muối cacbonat.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['k2co3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'K₂CO₃ + 2HCl → 2KCl + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Axit mạnh đẩy axit yếu.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['na2co3', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Na₂CO₃ + H₂SO₄ → Na₂SO₄ + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Axit mạnh đẩy axit yếu.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['k2co3', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'K₂CO₃ + H₂SO₄ → K₂SO₄ + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Axit mạnh đẩy axit yếu.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['agno3', 'bacl2'], outcome: ReactionOutcome.Occurs, equation: '2AgNO₃ + BaCl₂ → 2AgCl↓ + Ba(NO₃)₂', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo bạc clorua không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['cuso4', 'na2s'], outcome: ReactionOutcome.Occurs, equation: 'CuSO₄ + Na₂S → CuS↓ + Na₂SO₄', observations: 'Kết tủa đen xuất hiện.', explanation: 'Tạo đồng(II) sunfua không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#000000' } },
+            { reagents: ['fecl2', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'FeCl₂ + 2NaOH → Fe(OH)₂↓ + 2NaCl', observations: 'Kết tủa trắng xanh xuất hiện.', explanation: 'Tạo sắt(II) hydroxit.', safety: 'Dễ bị oxi hóa.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#dcfce7' } },
+            { reagents: ['fecl3', 'koh'], outcome: ReactionOutcome.Occurs, equation: 'FeCl₃ + 3KOH → Fe(OH)₃↓ + 3KCl', observations: 'Kết tủa nâu đỏ xuất hiện.', explanation: 'Tạo sắt(III) hydroxit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#991b1b' } },
+            { reagents: ['alcl3', 'koh'], outcome: ReactionOutcome.Occurs, equation: 'AlCl₃ + 3KOH → Al(OH)₃↓ + 3KCl', observations: 'Kết tủa trắng keo xuất hiện.', explanation: 'Tạo nhôm hydroxit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['zncl2', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'ZnCl₂ + 2NaOH → Zn(OH)₂↓ + 2NaCl', observations: 'Kết tủa trắng xuất hiện, tan nếu dư kiềm.', explanation: 'Tạo kẽm hydroxit lưỡng tính.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['pbno32', 'ki'], outcome: ReactionOutcome.Occurs, equation: 'Pb(NO₃)₂ + 2KI → PbI₂↓ + 2KNO₃', observations: 'Kết tủa vàng tươi xuất hiện (vàng rực rỡ).', explanation: 'Tạo chì(II) iotua kết tủa vàng.', safety: 'Chì độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#facc15' } },
+            { reagents: ['pbno32', 'na2s'], outcome: ReactionOutcome.Occurs, equation: 'Pb(NO₃)₂ + Na₂S → PbS↓ + 2NaNO₃', observations: 'Kết tủa đen xuất hiện.', explanation: 'Tạo chì(II) sunfua không tan.', safety: 'Chì độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#000000' } },
+            { reagents: ['pbno32', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Pb(NO₃)₂ + H₂SO₄ → PbSO₄↓ + 2HNO₃', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo chì(II) sunfat không tan.', safety: 'Chì độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['hgno32', 'ki'], outcome: ReactionOutcome.Occurs, equation: 'Hg(NO₃)₂ + 2KI → HgI₂↓ + 2KNO₃', observations: 'Kết tủa màu đỏ cam xuất hiện.', explanation: 'Tạo thủy ngân(II) iotua.', safety: 'Thủy ngân cực độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ef4444' } },
+            { reagents: ['nh3', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: '2NH₃ + H₂SO₄ → (NH₄)₂SO₄', observations: 'Tỏa nhiệt, không có hiện tượng mắt thường thấy rõ nếu là dung dịch.', explanation: 'Phản ứng tạo muối amoni sunfat.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['nh3', 'hno3'], outcome: ReactionOutcome.Occurs, equation: 'NH₃ + HNO₃ → NH₄NO₃', observations: 'Tỏa nhiệt.', explanation: 'Tạo muối amoni nitrat.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['cao', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'CaO + 2HCl → CaCl₂ + H₂O', observations: 'Vôi sống tan hết, tỏa nhiệt.', explanation: 'Oxit bazơ phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['mgo', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'MgO + 2HCl → MgCl₂ + H₂O', observations: 'Bột trắng tan hết.', explanation: 'Oxit bazơ phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['zno', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'ZnO + H₂SO₄ → ZnSO₄ + H₂O', observations: 'Bột trắng tan hết.', explanation: 'Oxit bazơ phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['al2o3', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Al₂O₃ + 3H₂SO₄ → Al₂(SO₄)₃ + 3H₂O', observations: 'Bột trắng tan.', explanation: 'Oxit phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['fe2o3', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Fe₂O₃ + 3H₂SO₄ → Fe₂(SO₄)₃ + 3H₂O', observations: 'Bột đỏ nâu tan dần, dung dịch chuyển vàng.', explanation: 'Oxit sắt phản ứng với axit.', safety: 'An toàn.', visual: { color: '#fde68a', gas: false, heat: false } },
+            { reagents: ['cuo', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'CuO + H₂SO₄ → CuSO₄ + H₂O', observations: 'Bột đen tan, dung dịch chuyển xanh.', explanation: 'Oxit đồng phản ứng với axit.', safety: 'An toàn.', visual: { color: '#3b82f6', gas: false, heat: false } },
+            { reagents: ['na2o', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'Na₂O + 2HCl → 2NaCl + H₂O', observations: 'Oxit tan, tỏa nhiệt.', explanation: 'Oxit bazơ phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['na2o', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Na₂O + H₂SO₄ → Na₂SO₄ + H₂O', observations: 'Oxit tan, tỏa nhiệt.', explanation: 'Oxit bazơ phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['co2', 'baoh2'], outcome: ReactionOutcome.Occurs, equation: 'CO₂ + Ba(OH)₂ → BaCO₃↓ + H₂O', observations: 'Dung dịch vẩn đục trắng.', explanation: 'Tạo Bari cacbonat không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['so2', 'baoh2'], outcome: ReactionOutcome.Occurs, equation: 'SO₂ + Ba(OH)₂ → BaSO₃↓ + H₂O', observations: 'Dung dịch vẩn đục trắng.', explanation: 'Tạo Bari sunfit không tan.', safety: 'SO2 độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['so3', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'SO₃ + 2NaOH → Na₂SO₄ + H₂O', observations: 'Tỏa nhiệt mạnh.', explanation: 'Oxit axit phản ứng với bazơ.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['p2o5', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'P₂O₅ + 6NaOH → 2Na₃PO₄ + 3H₂O', observations: 'Tỏa nhiệt mạnh.', explanation: 'Oxit axit phản ứng với bazơ.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['h2o2', 'mno2'], outcome: ReactionOutcome.Occurs, equation: '2H₂O₂ → 2H₂O + O₂↑', observations: 'Sủi bọt khí mãnh liệt khi cho bột đen vào.', explanation: 'MnO2 xúc tác phân hủy H2O2.', safety: 'Khí O2 duy trì sự cháy.', conditions: 'Xúc tác MnO₂', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['kclo3', 'mno2'], outcome: ReactionOutcome.Occurs, equation: '2KClO₃ → 2KCl + 3O₂↑', observations: 'Chất rắn nóng chảy, sủi bọt khí.', explanation: 'Phân hủy nhiệt KClO3 với xúc tác MnO2.', safety: 'Nguy cơ nổ nếu lẫn chất khử.', conditions: 'Nhiệt độ cao, xúc tác MnO₂', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['ch3cooh', 'na2co3'], outcome: ReactionOutcome.Occurs, equation: '2CH₃COOH + Na₂CO₃ → 2CH₃COONa + CO₂↑ + H₂O', observations: 'Sủi bọt khí mạnh.', explanation: 'Axit axetic đẩy CO2 ra khỏi muối cacbonat.', safety: 'An toàn.', visual: { color: 'transparent', gas: true, heat: false } },
+            { reagents: ['ch3cooh', 'mg'], outcome: ReactionOutcome.Occurs, equation: '2CH₃COOH + Mg → (CH₃COO)₂Mg + H₂↑', observations: 'Magiê tan, sủi bọt khí.', explanation: 'Axit hữu cơ phản ứng với kim loại.', safety: 'Khí Hidro dễ cháy.', visual: { color: 'transparent', gas: true, heat: false } },
+            { reagents: ['ch3cooh', 'zn'], outcome: ReactionOutcome.Occurs, equation: '2CH₃COOH + Zn → (CH₃COO)₂Zn + H₂↑', observations: 'Kẽm tan, sủi bọt khí.', explanation: 'Axit hữu cơ phản ứng với kim loại.', safety: 'Khí Hidro dễ cháy.', visual: { color: 'transparent', gas: true, heat: false } },
+            { reagents: ['c2h4', 'kmno4'], outcome: ReactionOutcome.Occurs, equation: '3C₂H₄ + 2KMnO₄ + 4H₂O → 3C₂H₄(OH)₂ + 2MnO₂↓ + 2KOH', observations: 'Dung dịch thuốc tím mất màu, xuất hiện kết tủa đen.', explanation: 'Oxi hóa etilen bằng thuốc tím.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#1e293b' } },
+            { reagents: ['c2h2', 'kmno4'], outcome: ReactionOutcome.Occurs, equation: '3C₂H₂ + 8KMnO₄ + 4H₂O → 3(COOH)₂ + 8MnO₂↓ + 8KOH', observations: 'Thuốc tím mất màu, kết tủa đen.', explanation: 'Oxi hóa axetilen.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#1e293b' } },
+            { reagents: ['aniline', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'C₆H₅NH₂ + HCl → C₆H₅NH₃Cl', observations: 'Aniline tan dần tạo dung dịch đồng nhất.', explanation: 'Bazơ hữu cơ phản ứng với axit mạnh tạo muối tan.', safety: 'Aniline độc.', visual: { color: '#fde68a', gas: false, heat: false } },
+            { reagents: ['phenol', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'C₆H₅OH + NaOH → C₆H₅ONa + H₂O', observations: 'Phenol tan dần tạo dung dịch trong suốt.', explanation: 'Phenol có tính axit yếu phản ứng với kiềm mạnh.', safety: 'Phenol độc.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['cu', 'fecl3'], outcome: ReactionOutcome.Occurs, equation: 'Cu + 2FeCl₃ → CuCl₂ + 2FeCl₂', observations: 'Đồng tan, dung dịch chuyển từ vàng nâu sang xanh lá/xanh dương.', explanation: 'Sắt(III) oxi hóa đồng thành đồng(II).', safety: 'An toàn.', visual: { color: '#0d9488', gas: false, heat: false } },
+            { reagents: ['fe', 'fecl3'], outcome: ReactionOutcome.Occurs, equation: 'Fe + 2FeCl₃ → 3FeCl₂', observations: 'Sắt tan, màu vàng nâu của dung dịch nhạt dần chuyển sang xanh nhạt.', explanation: 'Sắt(III) oxi hóa sắt thành sắt(II).', safety: 'An toàn.', visual: { color: '#dcfce7', gas: false, heat: false } },
+            { reagents: ['ag', 'hno3_dac'], outcome: ReactionOutcome.Occurs, equation: 'Ag + 2HNO₃(đặc) → AgNO₃ + NO₂↑ + H₂O', observations: 'Bạc tan, khí màu nâu đỏ thoát ra mạnh.', explanation: 'HNO3 đặc oxi hóa bạc.', safety: 'Khí NO2 rất độc.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['ag', 'hno3'], outcome: ReactionOutcome.Occurs, equation: '3Ag + 4HNO₃(loãng) → 3AgNO₃ + NO↑ + 2H₂O', observations: 'Bạc tan, khí không màu thoát ra hóa nâu trong không khí.', explanation: 'HNO3 loãng oxi hóa bạc.', safety: 'Khí NO độc.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['p', 'cl2'], outcome: ReactionOutcome.Occurs, equation: '2P + 3Cl₂ → 2PCl₃ (hoặc PCl₅)', observations: 'Phốt pho cháy trong khí clo tạo khói trắng.', explanation: 'Phốt pho phản ứng với clo.', safety: 'Khí clo độc.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['s', 'h2so4_dac'], outcome: ReactionOutcome.Occurs, equation: 'S + 2H₂SO₄(đặc) → 3SO₂↑ + 2H₂O', observations: 'Lưu huỳnh tan, sủi bọt khí mùi hắc.', explanation: 'Lưu huỳnh bị oxi hóa bởi axit đặc nóng.', safety: 'Khí SO2 độc.', conditions: 'Đun nóng', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['c', 'h2so4_dac'], outcome: ReactionOutcome.Occurs, equation: 'C + 2H₂SO₄(đặc) → CO₂↑ + 2SO₂↑ + 2H₂O', observations: 'Than tan, sủi bọt khí mạnh.', explanation: 'Carbon bị oxi hóa bởi axit đặc nóng.', safety: 'Khí SO2 độc.', conditions: 'Đun nóng', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['c', 'hno3_dac'], outcome: ReactionOutcome.Occurs, equation: 'C + 4HNO₃(đặc) → CO₂↑ + 4NO₂↑ + 2H₂O', observations: 'Than tan, khí màu nâu đỏ thoát ra mãnh liệt.', explanation: 'Carbon bị oxi hóa bởi HNO3 đặc nóng.', safety: 'Khí NO2 rất độc.', conditions: 'Đun nóng', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['h2s', 'o2'], outcome: ReactionOutcome.Occurs, equation: '2H₂S + O₂ → 2S↓ + 2H₂O (hoặc SO₂)', observations: 'Khí cháy với ngọn lửa xanh, xuất hiện bột màu vàng.', explanation: 'Oxi hóa H2S.', safety: 'Khí H2S cực độc.', conditions: 'Nhiệt độ cao', visual: { color: '#fde047', gas: true, heat: true, precipitate: '#fde047' } },
+            { reagents: ['h2s', 'so2'], outcome: ReactionOutcome.Occurs, equation: '2H₂S + SO₂ → 3S↓ + 2H₂O', observations: 'Xuất hiện bột màu vàng bám trên thành bình.', explanation: 'Phản ứng giữa hai khí lưu huỳnh.', safety: 'Cả hai khí đều độc.', visual: { color: '#fde047', gas: true, heat: false, precipitate: '#fde047' } },
+            { reagents: ['h2s', 'cuso4'], outcome: ReactionOutcome.Occurs, equation: 'H₂S + CuSO₄ → CuS↓ + H₂SO₄', observations: 'Kết tủa đen xuất hiện.', explanation: 'Tạo đồng(II) sunfua không tan trong axit.', safety: 'Khí H2S độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#000000' } },
+            { reagents: ['h2s', 'pbno32'], outcome: ReactionOutcome.Occurs, equation: 'H₂S + Pb(NO₃)₂ → PbS↓ + 2HNO₃', observations: 'Kết tủa đen xuất hiện.', explanation: 'Tạo chì(II) sunfua không tan.', safety: 'Chì độc, H2S độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#000000' } },
+            { reagents: ['nh3', 'cuo'], outcome: ReactionOutcome.Occurs, equation: '2NH₃ + 3CuO → 3Cu + N₂↑ + 3H₂O', observations: 'Bột đen chuyển sang màu đỏ gạch, có hơi nước ngưng tụ.', explanation: 'Amoniac khử oxit đồng.', safety: 'Cần đun nóng.', conditions: 'Nhiệt độ cao', visual: { color: '#b45309', gas: true, heat: true } },
+            { reagents: ['nh3', 'cl2'], outcome: ReactionOutcome.Occurs, equation: '2NH₃ + 3Cl₂ → N₂↑ + 6HCl', observations: 'Khí bốc khói trắng mạnh (do HCl gặp NH3 dư).', explanation: 'Amoniac phản ứng với clo.', safety: 'Khí clo độc.', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['cl2', 'ki'], outcome: ReactionOutcome.Occurs, equation: 'Cl₂ + 2KI → 2KCl + I₂', observations: 'Dung dịch chuyển sang màu nâu tím.', explanation: 'Clo đẩy Iốt ra khỏi muối.', safety: 'Khí clo độc.', visual: { color: '#4c1d95', gas: false, heat: false } },
+            { reagents: ['cl2', 'na2s'], outcome: ReactionOutcome.Occurs, equation: 'Cl₂ + Na₂S → 2NaCl + S↓', observations: 'Xuất hiện vẩn đục màu vàng.', explanation: 'Clo oxi hóa ion sunfua thành lưu huỳnh.', safety: 'Khí clo độc.', visual: { color: '#fde047', gas: false, heat: false, precipitate: '#fde047' } },
+            { reagents: ['br2', 'ki'], outcome: ReactionOutcome.Occurs, equation: 'Br₂ + 2KI → 2KBr + I₂', observations: 'Dung dịch chuyển sang màu nâu tím.', explanation: 'Brom đẩy Iốt.', safety: 'Brom độc.', visual: { color: '#4c1d95', gas: false, heat: false } },
+            { reagents: ['fe', 'alcl3'], outcome: ReactionOutcome.NoReaction, explanation: 'Sắt hoạt động hóa học yếu hơn Nhôm nên không đẩy được Nhôm.' },
+            { reagents: ['cu', 'znso4'], outcome: ReactionOutcome.NoReaction, explanation: 'Đồng yếu hơn Kẽm.' },
+            { reagents: ['ag', 'cuso4'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc yếu hơn Đồng.' },
+            { reagents: ['au', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Vàng không phản ứng với nước.' },
+            { reagents: ['pt', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạch kim không phản ứng với nước.' },
+            { reagents: ['c', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Than không phản ứng với nước ở điều kiện thường.' },
+            { reagents: ['s', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Lưu huỳnh không phản ứng với nước.' },
+            { reagents: ['p', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Phốt pho không phản ứng với nước.' },
+            { reagents: ['ca', 'cl2'], outcome: ReactionOutcome.Occurs, equation: 'Ca + Cl₂ → CaCl₂', observations: 'Canxi cháy sáng.', explanation: 'Tạo canxi clorua.', safety: 'Khí clo độc.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['baoh2', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'Ba(OH)₂ + H₂SO₄ → BaSO₄↓ + 2H₂O', observations: 'Xuất hiện kết tủa trắng mịn.', explanation: 'Phản ứng trung hòa tạo kết tủa.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true, precipitate: '#ffffff' } },
+            { reagents: ['naoh', 'h3po4'], outcome: ReactionOutcome.Occurs, equation: '3NaOH + H₃PO₄ → Na₃PO₄ + 3H₂O', observations: 'Tỏa nhiệt.', explanation: 'Phản ứng trung hòa.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['caoh2', 'h3po4'], outcome: ReactionOutcome.Occurs, equation: '3Ca(OH)₂ + 2H₃PO₄ → Ca₃(PO₄)₂↓ + 6H₂O', observations: 'Xuất hiện kết tủa trắng.', explanation: 'Tạo canxi photphat không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: true, precipitate: '#ffffff' } },
+            
+            // --- NEW REACTIONS ---
+            { reagents: ['cuco3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'CuCO₃ + 2HCl → CuCl₂ + CO₂↑ + H₂O', observations: 'Chất rắn màu xanh tan dần, sủi bọt khí mạnh, dung dịch chuyển xanh.', explanation: 'Axit mạnh đẩy axit yếu ra khỏi muối cacbonat.', safety: 'An toàn.', visual: { color: '#0d9488', gas: true, heat: false } },
+            { reagents: ['na2co3', 'caoh2'], outcome: ReactionOutcome.Occurs, equation: 'Na₂CO₃ + Ca(OH)₂ → CaCO₃↓ + 2NaOH', observations: 'Xuất hiện kết tủa trắng.', explanation: 'Phản ứng trao đổi tạo Canxi Cacbonat không tan.', safety: 'NaOH ăn mòn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['k2co3', 'caoh2'], outcome: ReactionOutcome.Occurs, equation: 'K₂CO₃ + Ca(OH)₂ → CaCO₃↓ + 2KOH', observations: 'Xuất hiện kết tủa trắng.', explanation: 'Phản ứng trao đổi tạo Canxi Cacbonat.', safety: 'KOH ăn mòn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['na2co3', 'bacl2'], outcome: ReactionOutcome.Occurs, equation: 'Na₂CO₃ + BaCl₂ → BaCO₃↓ + 2NaCl', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo Bari Cacbonat không tan.', safety: 'Muối Bari độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['nh4no3', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'NH₄NO₃ + NaOH → NaNO₃ + NH₃↑ + H₂O', observations: 'Có khí mùi khai thoát ra.', explanation: 'Muối amoni phản ứng với kiềm giải phóng khí amoniac.', safety: 'Khí NH3 kích ứng.', conditions: 'Đun nóng nhẹ', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['fe', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'Fe + 2AgNO₃ → Fe(NO₃)₂ + 2Ag↓', observations: 'Sắt tan, có lớp bạc sáng bám vào, dung dịch chuyển xanh nhạt.', explanation: 'Sắt đẩy bạc ra khỏi muối.', safety: 'Bạc nitrat làm đen da.', visual: { color: '#dcfce7', gas: false, heat: false, precipitate: '#e2e8f0' } },
+            { reagents: ['zn', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'Zn + 2AgNO₃ → Zn(NO₃)₂ + 2Ag↓', observations: 'Kẽm tan, bạc bám vào.', explanation: 'Kẽm đẩy bạc.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#e2e8f0' } },
+            { reagents: ['al', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'Al + 3AgNO₃ → Al(NO₃)₃ + 3Ag↓', observations: 'Nhôm tan mạnh, bạc bám vào.', explanation: 'Nhôm đẩy bạc.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#e2e8f0' } },
+            { reagents: ['fe', 'hno3_dac'], outcome: ReactionOutcome.Occurs, equation: 'Fe + 6HNO₃(đặc) → Fe(NO₃)₃ + 3NO₂↑ + 3H₂O', observations: 'Sắt tan, có khí màu nâu đỏ thoát ra mạnh, tỏa nhiệt.', explanation: 'HNO3 đặc oxi hóa sắt lên mức cao nhất.', safety: 'Khí NO2 rất độc! Sắt bị thụ động hóa trong HNO3 đặc nguội.', conditions: 'Đun nóng', visual: { color: '#fde68a', gas: true, heat: true } },
+            { reagents: ['al', 'hno3_dac'], outcome: ReactionOutcome.Occurs, equation: 'Al + 6HNO₃(đặc) → Al(NO₃)₃ + 3NO₂↑ + 3H₂O', observations: 'Nhôm tan, khí nâu đỏ thoát ra.', explanation: 'Oxi hóa nhôm bằng HNO3 đặc nóng.', safety: 'Khí NO2 độc. Nhôm bị thụ động hóa trong HNO3 đặc nguội.', conditions: 'Đun nóng', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['mg', 'hno3_dac'], outcome: ReactionOutcome.Occurs, equation: 'Mg + 4HNO₃(đặc) → Mg(NO₃)₂ + 2NO₂↑ + 2H₂O', observations: 'Magiê tan cực nhanh, khí nâu đỏ thoát ra mãnh liệt.', explanation: 'Phản ứng oxi hóa khử mạnh.', safety: 'Cực kỳ nguy hiểm.', visual: { color: '#f8fafc', gas: true, heat: true } },
+            { reagents: ['cu', 'hgno32'], outcome: ReactionOutcome.Occurs, equation: 'Cu + Hg(NO₃)₂ → Cu(NO₃)₂ + Hg↓', observations: 'Đồng tan, có lớp thủy ngân sáng loáng bám vào.', explanation: 'Đồng đẩy thủy ngân ra khỏi muối.', safety: 'Thủy ngân cực độc!', visual: { color: '#3b82f6', gas: false, heat: false, precipitate: '#94a3b8' } },
+            { reagents: ['c', 'o2'], outcome: ReactionOutcome.Occurs, equation: 'C + O₂ → CO₂', observations: 'Than cháy sáng, tỏa nhiều nhiệt.', explanation: 'Phản ứng cháy của carbon.', safety: 'Nguy cơ ngạt khí CO/CO2.', conditions: 'Nhiệt độ cao', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['cu', 's'], outcome: ReactionOutcome.Occurs, equation: 'Cu + S → CuS', observations: 'Hỗn hợp nóng đỏ, tạo chất rắn màu đen.', explanation: 'Đồng phản ứng với lưu huỳnh.', safety: 'An toàn.', conditions: 'Nhiệt độ cao', visual: { color: '#000000', gas: false, heat: true, precipitate: '#000000' } },
+            { reagents: ['na', 's'], outcome: ReactionOutcome.Occurs, equation: '2Na + S → Na₂S', observations: 'Phản ứng xảy ra mãnh liệt khi đun nóng.', explanation: 'Tạo natri sunfua.', safety: 'Nguy cơ cháy nổ.', conditions: 'Nhiệt độ cao', visual: { color: '#f8fafc', gas: false, heat: true } },
+            { reagents: ['na', 'o2'], outcome: ReactionOutcome.Occurs, equation: '2Na + O₂ → Na₂O₂ (hoặc Na₂O)', observations: 'Natri cháy với ngọn lửa vàng chói.', explanation: 'Tạo oxit hoặc peoxit natri.', safety: 'Ánh sáng mạnh.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['ca', 'o2'], outcome: ReactionOutcome.Occurs, equation: '2Ca + O₂ → 2CaO', observations: 'Canxi cháy sáng.', explanation: 'Tạo vôi sống.', safety: 'An toàn.', conditions: 'Nhiệt độ cao', visual: { color: '#ffffff', gas: true, heat: true } },
+            { reagents: ['naoh', 'zno'], outcome: ReactionOutcome.Occurs, equation: 'ZnO + 2NaOH + H₂O → Na₂[Zn(OH)₄]', observations: 'Bột trắng tan hết.', explanation: 'Oxit kẽm lưỡng tính tan trong kiềm.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['hcl', 'al2o3'], outcome: ReactionOutcome.Occurs, equation: 'Al₂O₃ + 6HCl → 2AlCl₃ + 3H₂O', observations: 'Bột trắng tan dần.', explanation: 'Oxit bazơ/lưỡng tính phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['h2so4', 'al2o3'], outcome: ReactionOutcome.Occurs, equation: 'Al₂O₃ + 3H₂SO₄ → Al₂(SO₄)₃ + 3H₂O', observations: 'Bột trắng tan.', explanation: 'Oxit phản ứng với axit.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false } },
+            { reagents: ['fe', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'Fe + 3AgNO₃(dư) → Fe(NO₃)₃ + 3Ag↓', observations: 'Sắt tan, bạc bám vào, dung dịch chuyển vàng nhạt.', explanation: 'Sắt đẩy bạc, nếu bạc nitrat dư sẽ oxi hóa Fe2+ lên Fe3+.', safety: 'An toàn.', visual: { color: '#fde68a', gas: false, heat: false, precipitate: '#e2e8f0' } },
+            { reagents: ['ag', 'o2'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc không bị oxi hóa bởi oxi ở điều kiện thường hay nhiệt độ cao.' },
+            { reagents: ['au', 'o2'], outcome: ReactionOutcome.NoReaction, explanation: 'Vàng không phản ứng với oxi.' },
+            { reagents: ['pt', 'o2'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạch kim không phản ứng với oxi.' },
+            { reagents: ['nacl', 'naoh'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng giữa muối ăn và xút.' },
+            { reagents: ['kno3', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng xảy ra.' },
+            { reagents: ['baso4', 'hno3'], outcome: ReactionOutcome.NoReaction, explanation: 'Bari sunfat không tan trong axit mạnh.' },
+            { reagents: ['cu', 'h3po4'], outcome: ReactionOutcome.NoReaction, explanation: 'Đồng không phản ứng với axit photphoric.' },
+
+            // --- NEW REACTIONS BATCH 3 ---
+            { reagents: ['mno2', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'MnO₂ + 4HCl(đặc) → MnCl₂ + Cl₂↑ + 2H₂O', observations: 'Bột đen tan dần, có khí màu vàng lục, mùi hắc thoát ra.', explanation: 'Oxi hóa HCl bằng MnO2 để điều chế Clo.', safety: 'Khí Clo rất độc.', conditions: 'Đun nóng', visual: { color: '#f1f5f9', gas: true, heat: true } },
+            { reagents: ['kclo3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'KClO₃ + 6HCl(đặc) → KCl + 3Cl₂↑ + 3H₂O', observations: 'Sủi bọt khí màu vàng lục mạnh.', explanation: 'KClO3 oxi hóa HCl.', safety: 'Khí Clo độc.', visual: { color: '#f1f5f9', gas: true, heat: false } },
+            { reagents: ['feso4', 'kmno4'], outcome: ReactionOutcome.Occurs, equation: '10FeSO₄ + 2KMnO₄ + 8H₂SO₄ → 5Fe₂(SO₄)₃ + 2MnSO₄ + K₂SO₄ + 8H₂O', observations: 'Dung dịch thuốc tím mất màu, chuyển sang màu vàng nhạt.', explanation: 'Fe(II) bị oxi hóa thành Fe(III) bởi KMnO4 trong môi trường axit.', safety: 'An toàn.', conditions: 'Có mặt H₂SO₄', visual: { color: '#fde68a', gas: false, heat: false } },
+            { reagents: ['ki', 'h2o2'], outcome: ReactionOutcome.Occurs, equation: '2KI + H₂O₂ → 2KOH + I₂', observations: 'Dung dịch chuyển sang màu nâu đỏ (của Iốt).', explanation: 'H2O2 oxi hóa KI.', safety: 'An toàn.', visual: { color: '#4c1d95', gas: false, heat: false } },
+            { reagents: ['ki', 'fecl3'], outcome: ReactionOutcome.Occurs, equation: '2KI + 2FeCl₃ → 2FeCl₂ + 2KCl + I₂', observations: 'Dung dịch chuyển sang màu nâu đậm.', explanation: 'Fe(III) oxi hóa I- thành I2.', safety: 'An toàn.', visual: { color: '#4c1d95', gas: false, heat: false } },
+            { reagents: ['ki', 'cuso4'], outcome: ReactionOutcome.Occurs, equation: '4KI + 2CuSO₄ → 2CuI↓ + I₂ + 2K₂SO₄', observations: 'Xuất hiện kết tủa trắng (CuI) trong dung dịch màu nâu đậm (I2).', explanation: 'Phản ứng oxi hóa khử tạo kết tủa đồng(I) iotua.', safety: 'An toàn.', visual: { color: '#4c1d95', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['na2s', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'Na₂S + 2AgNO₃ → Ag₂S↓ + 2NaNO₃', observations: 'Kết tủa đen xuất hiện ngay lập tức.', explanation: 'Tạo bạc sunfua cực kỳ không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#000000' } },
+            { reagents: ['na2so3', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'Na₂SO₃ + 2AgNO₃ → Ag₂SO₃↓ + 2NaNO₃', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo bạc sunfit không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['na2co3', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'Na₂CO₃ + 2AgNO₃ → Ag₂CO₃↓ + 2NaNO₃', observations: 'Kết tủa trắng hơi vàng xuất hiện.', explanation: 'Tạo bạc cacbonat.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['k2co3', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'K₂CO₃ + 2AgNO₃ → Ag₂CO₃↓ + 2KNO₃', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo bạc cacbonat.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['nh3', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'AgNO₃ + 2NH₃ + H₂O → [Ag(NH₃)₂]OH + NH₄NO₃', observations: 'Kết tủa nâu xám xuất hiện rồi tan ngay tạo dung dịch trong suốt.', explanation: 'Tạo phức bạc-amoniac tan.', safety: 'An toàn.', visual: { color: 'transparent', gas: false, heat: false } },
+            { reagents: ['nh3', 'cuso4'], outcome: ReactionOutcome.Occurs, equation: 'CuSO₄ + 4NH₃ → [Cu(NH₃)₄]SO₄', observations: 'Kết tủa xanh lơ xuất hiện rồi tan tạo dung dịch màu xanh lam thẫm.', explanation: 'Tạo phức đồng-amoniac.', safety: 'An toàn.', visual: { color: '#1e3a8a', gas: false, heat: false } },
+            { reagents: ['pbno32', 'naoh'], outcome: ReactionOutcome.Occurs, equation: 'Pb(NO₃)₂ + 2NaOH → Pb(OH)₂↓ + 2NaNO₃', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo chì(II) hydroxit.', safety: 'Chì độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['pbno32', 'koh'], outcome: ReactionOutcome.Occurs, equation: 'Pb(NO₃)₂ + 2KOH → Pb(OH)₂↓ + 2KNO₃', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo chì(II) hydroxit.', safety: 'Chì độc.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['cuo', 'h2'], outcome: ReactionOutcome.Occurs, equation: 'CuO + H₂ → Cu + H₂O', observations: 'Bột đen chuyển sang màu đỏ gạch, có hơi nước ngưng tụ.', explanation: 'Hidro khử oxit đồng.', safety: 'Khí Hidro dễ cháy.', conditions: 'Nhiệt độ cao', visual: { color: '#b45309', gas: true, heat: true } },
+            { reagents: ['fe2o3', 'h2'], outcome: ReactionOutcome.Occurs, equation: 'Fe₂O₃ + 3H₂ → 2Fe + 3H₂O', observations: 'Bột đỏ nâu chuyển sang màu xám đen.', explanation: 'Hidro khử oxit sắt.', safety: 'An toàn.', conditions: 'Nhiệt độ cao', visual: { color: '#1e293b', gas: true, heat: true } },
+            { reagents: ['fe3o4', 'h2'], outcome: ReactionOutcome.Occurs, equation: 'Fe₃O₄ + 4H₂ → 3Fe + 4H₂O', observations: 'Bột đen chuyển sang màu xám đen.', explanation: 'Hidro khử oxit sắt từ.', safety: 'An toàn.', conditions: 'Nhiệt độ cao', visual: { color: '#1e293b', gas: true, heat: true } },
+            { reagents: ['fe2o3', 'co'], outcome: ReactionOutcome.Occurs, equation: 'Fe₂O₃ + 3CO → 2Fe + 3CO₂', observations: 'Bột đỏ nâu chuyển sang màu xám đen.', explanation: 'CO khử oxit sắt trong luyện kim.', safety: 'Khí CO cực độc!', conditions: 'Nhiệt độ cao', visual: { color: '#1e293b', gas: true, heat: true } },
+            { reagents: ['cuo', 'co'], outcome: ReactionOutcome.Occurs, equation: 'CuO + CO → Cu + CO₂', observations: 'Bột đen chuyển sang đỏ gạch.', explanation: 'CO khử oxit đồng.', safety: 'Khí CO cực độc!', conditions: 'Nhiệt độ cao', visual: { color: '#b45309', gas: true, heat: true } },
+            { reagents: ['c', 'cuo'], outcome: ReactionOutcome.Occurs, equation: 'C + 2CuO → 2Cu + CO₂↑', observations: 'Hỗn hợp bột đen chuyển sang màu đỏ gạch, có khí thoát ra.', explanation: 'Carbon khử oxit đồng.', safety: 'An toàn.', conditions: 'Nhiệt độ cao', visual: { color: '#b45309', gas: true, heat: true } },
+            { reagents: ['c', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'C + H₂O ⇌ CO + H₂', observations: 'Than nóng đỏ phản ứng tạo hỗn hợp khí.', explanation: 'Sản xuất khí than ướt.', safety: 'Khí CO độc.', conditions: 'Nhiệt độ rất cao', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['ch4', 'h2o'], outcome: ReactionOutcome.Occurs, equation: 'CH₄ + H₂O ⇌ CO + 3H₂', observations: 'Không có hiện tượng mắt thường thấy rõ.', explanation: 'Phản ứng reforming methane sản xuất hidro.', safety: 'An toàn.', conditions: 'Nhiệt độ cao, xúc tác Ni', visual: { color: 'transparent', gas: true, heat: true } },
+            { reagents: ['cl2', 'h2s'], outcome: ReactionOutcome.Occurs, equation: 'Cl₂ + H₂S → S↓ + 2HCl', observations: 'Xuất hiện vẩn đục màu vàng.', explanation: 'Clo oxi hóa H2S.', safety: 'Cả hai khí đều độc.', visual: { color: '#fde047', gas: true, heat: false, precipitate: '#fde047' } },
+            { reagents: ['br2', 'h2s'], outcome: ReactionOutcome.Occurs, equation: 'Br₂ + H₂S → S↓ + 2HBr', observations: 'Dung dịch Brom mất màu, xuất hiện vẩn đục vàng.', explanation: 'Brom oxi hóa H2S.', safety: 'Brom độc.', visual: { color: '#fde047', gas: false, heat: false, precipitate: '#fde047' } },
+            { reagents: ['i2', 'h2s'], outcome: ReactionOutcome.Occurs, equation: 'I₂ + H₂S → S↓ + 2HI', observations: 'Màu tím đen của Iốt biến mất, xuất hiện vẩn đục vàng.', explanation: 'Iốt oxi hóa H2S.', safety: 'An toàn.', visual: { color: '#fde047', gas: false, heat: false, precipitate: '#fde047' } },
+            { reagents: ['agno3', 'h3po4'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc photphat tan trong axit nitric nên phản ứng không xảy ra.' },
+            { reagents: ['baso3', 'hcl'], outcome: ReactionOutcome.Occurs, equation: 'BaSO₃ + 2HCl → BaCl₂ + SO₂↑ + H₂O', observations: 'Kết tủa tan, sủi bọt khí mùi hắc.', explanation: 'Axit mạnh đẩy axit yếu.', safety: 'Khí SO2 độc.', visual: { color: '#f8fafc', gas: true, heat: false } },
+            { reagents: ['baso3', 'h2so4'], outcome: ReactionOutcome.Occurs, equation: 'BaSO₃ + H₂SO₄ → BaSO₄↓ + SO₂↑ + H₂O', observations: 'Kết tủa trắng này chuyển sang kết tủa trắng khác, sủi bọt khí.', explanation: 'Tạo Bari sunfat không tan.', safety: 'SO2 độc.', visual: { color: '#f8fafc', gas: true, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['na2so3', 'baoh2'], outcome: ReactionOutcome.Occurs, equation: 'Na₂SO₃ + Ba(OH)₂ → BaSO₃↓ + 2NaOH', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo Bari sunfit không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['k2so4', 'bacl2'], outcome: ReactionOutcome.Occurs, equation: 'K₂SO₄ + BaCl₂ → BaSO₄↓ + 2KCl', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo Bari sunfat không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['na2so4', 'baoh2'], outcome: ReactionOutcome.Occurs, equation: 'Na₂SO₄ + Ba(OH)₂ → BaSO₄↓ + 2NaOH', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo Bari sunfat không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['k2so4', 'baoh2'], outcome: ReactionOutcome.Occurs, equation: 'K₂SO₄ + Ba(OH)₂ → BaSO₄↓ + 2KOH', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo Bari sunfat không tan.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['alcl3', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'AlCl₃ + 3AgNO₃ → 3AgCl↓ + Al(NO₃)₃', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo bạc clorua.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['zncl2', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'ZnCl₂ + 2AgNO₃ → 2AgCl↓ + Zn(NO₃)₂', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo bạc clorua.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['mgcl2', 'agno3'], outcome: ReactionOutcome.Occurs, equation: 'MgCl₂ + 2AgNO₃ → 2AgCl↓ + Mg(NO₃)₂', observations: 'Kết tủa trắng xuất hiện.', explanation: 'Tạo bạc clorua.', safety: 'An toàn.', visual: { color: '#f8fafc', gas: false, heat: false, precipitate: '#ffffff' } },
+            { reagents: ['nacl', 'baoh2'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có kết tủa hay khí thoát ra.' },
+            { reagents: ['na2so4', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['k2so4', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['na2so4', 'hno3'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['k2so4', 'hno3'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['nh4cl', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['nh4no3', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['ag', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc đứng sau Hidro trong dãy hoạt động hóa học.' },
+            { reagents: ['fe', 'naoh'], outcome: ReactionOutcome.NoReaction, explanation: 'Sắt không phản ứng với dung dịch kiềm ở điều kiện thường.' },
+            { reagents: ['mg', 'naoh'], outcome: ReactionOutcome.NoReaction, explanation: 'Magiê không phản ứng với dung dịch kiềm.' },
+            { reagents: ['cu', 'naoh'], outcome: ReactionOutcome.NoReaction, explanation: 'Đồng không phản ứng với dung dịch kiềm.' },
+            { reagents: ['ag', 'naoh'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc không phản ứng với dung dịch kiềm.' },
+            { reagents: ['caco3', 'naoh'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng trao đổi xảy ra.' },
+            { reagents: ['agcl', 'hno3'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc clorua không tan trong axit nitric.' },
+            { reagents: ['baso4', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Bari sunfat cực kỳ bền, không tan trong axit.' },
+            { reagents: ['cuso4', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có kết tủa hay khí thoát ra.' },
+            { reagents: ['feso4', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['znso4', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['agno3', 'hno3'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['bacl2', 'hcl'], outcome: ReactionOutcome.NoReaction, explanation: 'Không có phản ứng.' },
+            { reagents: ['caco3', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Đá vôi không tan trong nước.' },
+            { reagents: ['baso4', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Bari sunfat không tan trong nước.' },
+            { reagents: ['agcl', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Bạc clorua không tan trong nước.' },
+            { reagents: ['cuo', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Oxit đồng không tan và không phản ứng với nước.' },
+            { reagents: ['fe2o3', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Oxit sắt không phản ứng với nước.' },
+            { reagents: ['al2o3', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Oxit nhôm không tan trong nước.' },
+            { reagents: ['sio2', 'h2o'], outcome: ReactionOutcome.NoReaction, explanation: 'Cát không tan trong nước.' },
+        ];
+
+
+        // --- COMPONENTS ---
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const containerRef = useRef(null);
+            
+            useEffect(() => {
+                if (containerRef.current && window.lucide) {
+                    // Clear previous content to prevent accumulation
+                    containerRef.current.innerHTML = '';
+                    
+                    // Create a fresh element for Lucide to transform
+                    const i = document.createElement('i');
+                    i.setAttribute('data-lucide', name);
+                    if (className) i.className = className;
+                    i.style.width = `${size}px`;
+                    i.style.height = `${size}px`;
+                    i.style.display = 'inline-block';
+                    
+                    containerRef.current.appendChild(i);
+                    
+                    try {
+                        if (typeof window.lucide.createIcons === 'function') {
+                            window.lucide.createIcons({
+                                elements: [i]
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Lucide icon error:", e);
+                    }
+                }
+            }, [name, size, className]);
+
+            return <span ref={containerRef} className="inline-flex items-center justify-center" style={{ width: size, height: size }}></span>;
+        };
+
+        const App = () => {
+            const [reagentA, setReagentA] = useState(null);
+            const [reagentB, setReagentB] = useState(null);
+            const [searchA, setSearchA] = useState('');
+            const [searchB, setSearchB] = useState('');
+            const [showListA, setShowListA] = useState(false);
+            const [showListB, setShowListB] = useState(false);
+            
+            // Conditions
+            const [tempValue, setTempValue] = useState('');
+            const [tempUnit, setTempUnit] = useState('°C');
+            const [catalyst, setCatalyst] = useState('');
+            const [pressure, setPressure] = useState('');
+
+            const [isSimulating, setIsSimulating] = useState(false);
+            const [result, setResult] = useState(null);
+            const [history, setHistory] = useState([]);
+            const simulationTimeoutRef = useRef(null);
+
+            useEffect(() => {
+                // Initial Lucide pass for any static icons
+                if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                    window.lucide.createIcons();
+                }
+                
+                return () => {
+                    if (simulationTimeoutRef.current) clearTimeout(simulationTimeoutRef.current);
+                };
+            }, []);
+
+            const addToHistory = (reaction) => {
+                if (reaction.outcome === ReactionOutcome.Occurs) {
+                    setHistory(prev => [
+                        { ...reaction, timestamp: new Date().toLocaleTimeString() },
+                        ...prev.slice(0, 4)
+                    ]);
+                }
+            };
+
+            const handleLoadExample = (ex) => {
+                try {
+                    reset();
+                    const charA = CHEMICAL_LIBRARY.find(c => c.id === ex.a);
+                    const charB = CHEMICAL_LIBRARY.find(c => c.id === ex.b);
+                    
+                    if (!charA || !charB) {
+                        console.warn("Example reagents not found:", ex.a, ex.b);
+                        return;
+                    }
+
+                    setReagentA(charA);
+                    setReagentB(charB);
+                    setTempValue(ex.temp || '');
+                    setTempUnit(ex.unit || '°C');
+                    setCatalyst(ex.catalyst || '');
+                    setPressure(ex.pressure || '');
+                    
+                    setIsSimulating(true);
+                    if (simulationTimeoutRef.current) clearTimeout(simulationTimeoutRef.current);
+                    
+                    simulationTimeoutRef.current = setTimeout(() => {
+                        try {
+                            const match = REACTIONS_DB.find(r => 
+                                r && r.reagents && Array.isArray(r.reagents) &&
+                                r.reagents.includes(ex.a) && r.reagents.includes(ex.b)
+                            );
+                            
+                            if (match) {
+                                setResult(match);
+                                addToHistory(match);
+                            } else {
+                                setResult({ 
+                                    outcome: ReactionOutcome.NoReaction, 
+                                    explanation: 'Không có phản ứng hóa học xảy ra ở điều kiện hiện tại.' 
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Example simulation error:", err);
+                        } finally {
+                            setIsSimulating(false);
+                        }
+                    }, 1500);
+                } catch (err) {
+                    console.error("Load example error:", err);
+                    setIsSimulating(false);
+                }
+            };
+
+            const filteredA = useMemo(() => CHEMICAL_LIBRARY.filter(c => 
+                c.name.toLowerCase().includes(searchA.toLowerCase()) || 
+                c.formula.toLowerCase().includes(searchA.toLowerCase())
+            ), [searchA]);
+
+            const filteredB = useMemo(() => CHEMICAL_LIBRARY.filter(c => 
+                c.name.toLowerCase().includes(searchB.toLowerCase()) || 
+                c.formula.toLowerCase().includes(searchB.toLowerCase())
+            ), [searchB]);
+
+            const handleSimulate = () => {
+                if (!reagentA || !reagentB) return;
+                
+                try {
+                    setIsSimulating(true);
+                    setResult(null);
+                    
+                    // Capture current IDs to avoid issues if state changes during timeout
+                    const idA = reagentA.id;
+                    const idB = reagentB.id;
+
+                    if (simulationTimeoutRef.current) clearTimeout(simulationTimeoutRef.current);
+                    simulationTimeoutRef.current = setTimeout(() => {
+                        try {
+                            const match = REACTIONS_DB.find(r => 
+                                r && r.reagents && Array.isArray(r.reagents) &&
+                                r.reagents.includes(idA) && r.reagents.includes(idB)
+                            );
+                            
+                            if (match) {
+                                setResult(match);
+                                addToHistory(match);
+                            } else {
+                                setResult({ 
+                                    outcome: ReactionOutcome.NoReaction, 
+                                    explanation: 'Không có phản ứng hóa học xảy ra ở điều kiện hiện tại.' 
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Simulation internal error:", err);
+                            setResult({ 
+                                outcome: ReactionOutcome.Undetermined, 
+                                explanation: 'Đã xảy ra lỗi trong quá trình mô phỏng phản ứng.' 
+                            });
+                        } finally {
+                            setIsSimulating(false);
+                        }
+                    }, 1500);
+                } catch (err) {
+                    console.error("Simulation start error:", err);
+                    setIsSimulating(false);
+                }
+            };
+
+            const reset = () => {
+                if (simulationTimeoutRef.current) clearTimeout(simulationTimeoutRef.current);
+                setReagentA(null);
+                setReagentB(null);
+                setSearchA('');
+                setSearchB('');
+                setTempValue('');
+                setCatalyst('');
+                setPressure('');
+                setResult(null);
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-10">
+                    <div className="max-w-6xl mx-auto">
+                        <header className="text-center mb-12">
+                            <motion.div 
+                                initial={{ opacity: 0, y: -20 }} 
+                                animate={{ opacity: 1, y: 0 }} 
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-800 rounded-full mb-4"
+                            >
+                                <Icon name="beaker" /> 
+                                <span className="text-xs font-bold uppercase tracking-widest">AI Chemistry Lab v3.5</span>
+                            </motion.div>
+                            <h1 className="text-5xl md:text-7xl font-serif font-bold tracking-tighter mb-4">
+                                Phòng Thí Nghiệm <span className="italic text-emerald-600">Hóa Học Ảo</span>
+                            </h1>
+                            <p className="text-stone-500 max-w-2xl mx-auto">
+                                Mô phỏng phản ứng hóa học hoàn chỉnh với thư viện 70+ chất và điều kiện thí nghiệm tùy chỉnh.
+                            </p>
+                        </header>
+
+                        <div className="grid lg:grid-cols-12 gap-10">
+                            {/* Controls */}
+                            <div className="lg:col-span-5 space-y-6">
+                                {/* Examples Section */}
+                                <div className="glass p-6 rounded-[2rem] shadow-lg">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <Icon name="zap" className="text-amber-500" />
+                                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Thí nghiệm mẫu (Quick Start)</span>
+                                        </div>
+                                        <button 
+                                            onClick={reset}
+                                            className="text-[10px] font-bold text-stone-400 hover:text-emerald-600 transition-colors flex items-center gap-1"
+                                        >
+                                            <Icon name="rotate-ccw" size={12} /> Reset
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {EXAMPLES.map((ex, idx) => (
+                                            <button 
+                                                key={idx}
+                                                onClick={() => handleLoadExample(ex)}
+                                                className="px-3 py-1.5 bg-white border border-stone-200 rounded-full text-[11px] font-bold text-stone-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition-all shadow-sm"
+                                            >
+                                                {ex.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="glass p-8 rounded-[2.5rem] shadow-xl">
+                                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                                        <Icon name="flask-conical" className="text-emerald-600" /> Thiết lập thí nghiệm
+                                    </h3>
+                                    <div className="space-y-6">
+                                        {/* Reagents */}
+                                        <div className="grid grid-cols-1 gap-4">
+                                            <div className="relative">
+                                                <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2 block">Chất phản ứng A</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full p-4 bg-stone-100 border-none rounded-2xl focus:ring-2 ring-emerald-500 outline-none pr-12" 
+                                                    placeholder="Tìm chất A..." 
+                                                    value={reagentA ? `${reagentA.name} (${reagentA.formula})` : searchA}
+                                                    onChange={(e) => { setSearchA(e.target.value); setReagentA(null); setShowListA(true); }}
+                                                    onFocus={() => setShowListA(true)}
+                                                />
+                                                {(reagentA || searchA) && (
+                                                    <button 
+                                                        onClick={() => { setReagentA(null); setSearchA(''); }}
+                                                        className="absolute right-4 top-[42px] text-stone-400 hover:text-stone-600"
+                                                    >
+                                                        <Icon name="x" size={16} />
+                                                    </button>
+                                                )}
+                                                {showListA && filteredA.length > 0 && (
+                                                    <div className="absolute z-30 w-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto">
+                                                        {filteredA.map(c => (
+                                                            <button 
+                                                                key={c.id} 
+                                                                className="w-full text-left px-4 py-3 hover:bg-emerald-50 border-b border-stone-50 last:border-none" 
+                                                                onClick={() => { setReagentA(c); setShowListA(false); }}
+                                                            >
+                                                                <div className="font-bold text-sm">{c.name}</div>
+                                                                <div className="text-[10px] text-stone-400">{c.formula} • {c.category}</div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="relative">
+                                                <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2 block">Chất phản ứng B</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full p-4 bg-stone-100 border-none rounded-2xl focus:ring-2 ring-emerald-500 outline-none pr-12" 
+                                                    placeholder="Tìm chất B..." 
+                                                    value={reagentB ? `${reagentB.name} (${reagentB.formula})` : searchB}
+                                                    onChange={(e) => { setSearchB(e.target.value); setReagentB(null); setShowListB(true); }}
+                                                    onFocus={() => setShowListB(true)}
+                                                />
+                                                {(reagentB || searchB) && (
+                                                    <button 
+                                                        onClick={() => { setReagentB(null); setSearchB(''); }}
+                                                        className="absolute right-4 top-[42px] text-stone-400 hover:text-stone-600"
+                                                    >
+                                                        <Icon name="x" size={16} />
+                                                    </button>
+                                                )}
+                                                {showListB && filteredB.length > 0 && (
+                                                    <div className="absolute z-30 w-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto">
+                                                        {filteredB.map(c => (
+                                                            <button 
+                                                                key={c.id} 
+                                                                className="w-full text-left px-4 py-3 hover:bg-emerald-50 border-b border-stone-50 last:border-none" 
+                                                                onClick={() => { setReagentB(c); setShowListB(false); }}
+                                                            >
+                                                                <div className="font-bold text-sm">{c.name}</div>
+                                                                <div className="text-[10px] text-stone-400">{c.formula} • {c.category}</div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Conditions */}
+                                        <div className="pt-4 border-t border-stone-100 space-y-4">
+                                            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest block">Điều kiện phản ứng</label>
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-bold text-stone-500">Nhiệt độ</label>
+                                                    <div className="flex gap-2">
+                                                        <input 
+                                                            type="number" 
+                                                            className="w-full p-2 bg-stone-100 rounded-xl outline-none text-sm" 
+                                                            placeholder="Số..."
+                                                            value={tempValue}
+                                                            onChange={(e) => setTempValue(e.target.value)}
+                                                        />
+                                                        <select 
+                                                            className="p-2 bg-stone-100 rounded-xl text-xs outline-none"
+                                                            value={tempUnit}
+                                                            onChange={(e) => setTempUnit(e.target.value)}
+                                                        >
+                                                            <option value="°C">°C</option>
+                                                            <option value="°K">°K</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-bold text-stone-500">Áp suất (atm)</label>
+                                                    <input 
+                                                        type="number" 
+                                                        className="w-full p-2 bg-stone-100 rounded-xl outline-none text-sm" 
+                                                        placeholder="atm..."
+                                                        value={pressure}
+                                                        onChange={(e) => setPressure(e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-bold text-stone-500">Chất xúc tác</label>
+                                                <select 
+                                                    className="w-full p-3 bg-stone-100 rounded-xl text-sm outline-none"
+                                                    value={catalyst}
+                                                    onChange={(e) => setCatalyst(e.target.value)}
+                                                >
+                                                    <option value="">Không có</option>
+                                                    {CATALYSTS.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <button 
+                                            onClick={handleSimulate} 
+                                            disabled={!reagentA || !reagentB || isSimulating} 
+                                            className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-30 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            {isSimulating ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                    Đang tiến hành...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Icon name="play" size={18} />
+                                                    Bắt đầu Thí nghiệm
+                                                </>
+                                            )}
+                                        </button>
+                                        <button 
+                                            onClick={reset} 
+                                            className="w-full py-3 border-2 border-stone-200 text-stone-500 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-stone-50 hover:border-stone-300 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <Icon name="refresh-ccw" size={14} />
+                                            Làm mới toàn bộ
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex gap-4">
+                                    <Icon name="alert-triangle" className="text-amber-600 shrink-0" />
+                                    <p className="text-xs text-amber-800 leading-relaxed font-medium">
+                                        Sản phẩm đang trong quá trình demo, vẫn nên tìm hiểu kỹ thông tin ở các nguồn đáng tin cậy đi
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Visual Simulation */}
+                            <div className="lg:col-span-7">
+                                <div className="bg-stone-900 rounded-[3rem] h-[650px] shadow-2xl relative overflow-hidden border-8 border-stone-800 flex items-center justify-center">
+                                    <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_50%_20%,#10b981,transparent_70%)]"></div>
+                                    <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black/40 to-transparent"></div>
+                                    
+                                    <div className="relative z-10 flex items-end gap-16">
+                                        {/* Beaker A */}
+                                        <div className="w-28 h-44 border-4 border-white/10 border-t-0 rounded-b-3xl relative glass overflow-hidden shadow-inner">
+                                            <div className="glass-reflection"></div>
+                                            {reagentA && (
+                                                <motion.div 
+                                                    initial={{ height: 0 }} 
+                                                    animate={{ height: '60%' }} 
+                                                    className="beaker-liquid" 
+                                                    style={{ backgroundColor: reagentA.color || '#f8fafc' }} 
+                                                >
+                                                    <div className="liquid-surface"></div>
+                                                </motion.div>
+                                            )}
+                                        </div>
+                                        {/* Beaker B */}
+                                        <div className="w-28 h-44 border-4 border-white/10 border-t-0 rounded-b-3xl relative glass overflow-hidden shadow-inner">
+                                            <div className="glass-reflection"></div>
+                                            {reagentB && (
+                                                <motion.div 
+                                                    initial={{ height: 0 }} 
+                                                    animate={{ height: '60%' }} 
+                                                    className="beaker-liquid" 
+                                                    style={{ backgroundColor: reagentB.color || '#f8fafc' }} 
+                                                >
+                                                    <div className="liquid-surface"></div>
+                                                </motion.div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Reaction Result Visual */}
+                                    <AnimatePresence>
+                                        {result && result.outcome === ReactionOutcome.Occurs && !isSimulating && (
+                                            <motion.div 
+                                                key={`visual-${result.equation}`}
+                                                initial={{ opacity: 0, scale: 0.8, y: 20 }} 
+                                                animate={{ opacity: 1, scale: 1, y: 0 }} 
+                                                exit={{ opacity: 0, scale: 0.8, y: 20 }}
+                                                className="absolute inset-0 z-20 flex items-center justify-center"
+                                            >
+                                                <div className={`w-56 h-72 border-4 border-white/20 border-t-0 rounded-b-[3.5rem] relative glass overflow-hidden shadow-2xl ${result.visual?.heat ? 'heat-glow' : ''}`}>
+                                                    <div className="glass-reflection"></div>
+                                                    <div 
+                                                        className="beaker-liquid h-[75%] shadow-[inset_0_15px_30px_rgba(0,0,0,0.15)]" 
+                                                        style={{ backgroundColor: result.visual?.color || '#f8fafc' }} 
+                                                    >
+                                                        <div className="liquid-surface"></div>
+                                                    </div>
+                                                    {result.visual?.heat && (
+                                                        <div className="absolute inset-0 pointer-events-none">
+                                                            {[...Array(5)].map((_, i) => (
+                                                                <div 
+                                                                    key={`sparkle-${i}`}
+                                                                    className="sparkle"
+                                                                    style={{
+                                                                        width: '10px',
+                                                                        height: '10px',
+                                                                        left: `${Math.random() * 80 + 10}%`,
+                                                                        top: `${Math.random() * 60 + 20}%`,
+                                                                        animationDelay: `${Math.random() * 2}s`
+                                                                    }}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {result.visual?.gas && (
+                                                        <div className="absolute inset-0">
+                                                            {[...Array(25)].map((_, i) => (
+                                                                <div 
+                                                                    key={`bubble-${i}`} 
+                                                                    className="bubble" 
+                                                                    style={{ 
+                                                                        left: `${(i * 4.3) % 90 + 5}%`, 
+                                                                        width: `${(i % 6) + 3}px`, 
+                                                                        height: `${(i % 6) + 3}px`, 
+                                                                        animationDelay: `${(i * 0.17) % 2.5}s` 
+                                                                    }}
+                                                                ></div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {result.visual?.precipitate && (
+                                                        <div 
+                                                            className="precipitate" 
+                                                            style={{ backgroundColor: result.visual.precipitate || '#ffffff' }}
+                                                        ></div>
+                                                    )}
+                                                    {result.visual?.heat && (
+                                                        <div className="absolute inset-0">
+                                                            {[...Array(12)].map((_, i) => (
+                                                                <div 
+                                                                    key={`steam-${i}`} 
+                                                                    className="steam-particle" 
+                                                                    style={{ 
+                                                                        left: `${(i * 9.5) % 80 + 10}%`, 
+                                                                        width: `${(i % 15) + 20}px`, 
+                                                                        height: `${(i % 15) + 20}px`, 
+                                                                        animationDelay: `${(i * 0.43) % 4}s` 
+                                                                    }}
+                                                                ></div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    {isSimulating && (
+                                        <motion.div 
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="absolute inset-0 z-30 bg-stone-900/40 backdrop-blur-sm flex flex-col items-center justify-center"
+                                        >
+                                            <div className="relative">
+                                                <div className="w-20 h-20 border-4 border-emerald-500/20 rounded-full"></div>
+                                                <div className="absolute top-0 left-0 w-20 h-20 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                                            </div>
+                                            <div className="mt-6 text-white text-sm font-black tracking-[0.3em] uppercase animate-pulse">Đang phản ứng...</div>
+                                        </motion.div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Result Details */}
+                        <AnimatePresence>
+                            {result && !isSimulating && (
+                                <motion.div 
+                                    key={`result-details-${result.equation}`}
+                                    initial={{ opacity: 0, y: 40 }} 
+                                    animate={{ opacity: 1, y: 0 }} 
+                                    className="mt-16 glass p-10 rounded-[3rem] shadow-2xl border-l-[12px] border-emerald-500"
+                                >
+                                    {result.outcome === ReactionOutcome.Occurs ? (
+                                        <div className="grid md:grid-cols-2 gap-12">
+                                            <div>
+                                                <div className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-4">Kết quả quan sát</div>
+                                                <div className="flex items-center gap-4 mb-6">
+                                                    <h2 className="text-4xl font-serif font-bold text-stone-800 tracking-tight leading-tight">
+                                                        {result.equation}
+                                                    </h2>
+                                                    <button 
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(result.equation);
+                                                            alert('Đã sao chép phương trình!');
+                                                        }}
+                                                        className="p-2 bg-stone-100 hover:bg-emerald-100 text-stone-500 hover:text-emerald-600 rounded-xl transition-colors"
+                                                        title="Sao chép phương trình"
+                                                    >
+                                                        <Icon name="copy" size={18} />
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-6">
+                                                    {result.conditions && (
+                                                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                                                            <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Điều kiện cần thiết</h4>
+                                                            <p className="text-emerald-800 text-sm font-bold">{result.conditions}</p>
+                                                        </div>
+                                                    )}
+                                                    <div className="bg-stone-50 p-6 rounded-3xl border border-stone-100">
+                                                        <h4 className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Hiện tượng</h4>
+                                                        <p className="text-stone-700 font-medium leading-relaxed">{result.observations}</p>
+                                                    </div>
+                                                    <div className="bg-stone-50 p-6 rounded-3xl border border-stone-100">
+                                                        <h4 className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Giải thích khoa học</h4>
+                                                        <p className="text-stone-600 text-sm leading-relaxed italic">{result.explanation}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col justify-center">
+                                                <div className="p-8 bg-amber-50 rounded-[2.5rem] border border-amber-100">
+                                                    <h4 className="font-bold text-amber-900 mb-6 flex items-center gap-2">
+                                                        <Icon name="shield-alert" /> Cảnh báo an toàn chi tiết
+                                                    </h4>
+                                                    <div className="space-y-4 text-amber-800 text-sm font-medium">
+                                                        <p><strong>Về phản ứng:</strong> {result.safety}</p>
+                                                        {reagentA?.detailedSafety && <p><strong>Về {reagentA.formula}:</strong> {reagentA.detailedSafety}</p>}
+                                                        {reagentB?.detailedSafety && <p><strong>Về {reagentB.formula}:</strong> {reagentB.detailedSafety}</p>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : result.outcome === ReactionOutcome.NoReaction ? (
+                                        <div className="text-center py-16">
+                                            <Icon name="x-circle" size={64} className="text-rose-400 mx-auto mb-6" />
+                                            <h2 className="text-3xl font-serif font-bold text-stone-800 mb-4">Không có phản ứng</h2>
+                                            <p className="text-stone-500 max-w-md mx-auto">{result.explanation}</p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-16">
+                                            <Icon name="help-circle" size={64} className="text-amber-400 mx-auto mb-6" />
+                                            <h2 className="text-3xl font-serif font-bold text-stone-800 mb-4">Chưa xác định</h2>
+                                            <p className="text-stone-500 max-w-md mx-auto">{result.explanation}</p>
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        <AnimatePresence>
+                            {history.length > 0 && (
+                                <motion.div 
+                                    key="history-section"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="mt-12"
+                                >
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div className="flex items-center gap-2">
+                                            <Icon name="history" className="text-stone-400" />
+                                            <h3 className="text-sm font-black text-stone-400 uppercase tracking-widest">Lịch sử thí nghiệm gần đây</h3>
+                                        </div>
+                                        <button 
+                                            onClick={() => setHistory([])}
+                                            className="text-[10px] font-bold text-stone-400 hover:text-rose-500 transition-colors flex items-center gap-1"
+                                        >
+                                            <Icon name="trash-2" size={12} /> Xóa lịch sử
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {history.map((h, i) => (
+                                            <motion.div 
+                                                key={`${h.timestamp}-${h.equation}-${i}`}
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                className="glass p-5 rounded-2xl border border-stone-200 hover:border-emerald-200 transition-all group"
+                                            >
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="text-[10px] font-bold text-stone-400">{h.timestamp}</span>
+                                                    <button 
+                                                        onClick={() => navigator.clipboard.writeText(h.equation)}
+                                                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-emerald-50 text-stone-400 hover:text-emerald-600 rounded-lg transition-all"
+                                                    >
+                                                        <Icon name="copy" size={12} />
+                                                    </button>
+                                                </div>
+                                                <div className="font-mono text-xs font-bold text-stone-700 truncate">{h.equation}</div>
+                                                <div className="mt-2 text-[10px] text-stone-400 italic truncate">{h.observations}</div>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        <footer className="mt-32 py-16 border-t border-stone-200 text-center space-y-4">
+                            <p className="text-stone-400 text-[10px] font-black uppercase tracking-[0.3em]">© 2026 Virtual Chemistry Lab - Standalone Edition</p>
+                            <p className="text-stone-300 text-xs italic">Thiết kế cho mục đích giáo dục và nghiên cứu mô phỏng.</p>
+                            <p className="text-stone-300 text-[10px] italic">Sản phẩm đang trong quá trình demo, vẫn nên tìm hiểu kỹ thông tin ở các nguồn đáng tin cậy đi</p>
+                        </footer>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
+        );
+    </script>
+</body>
+</html>
